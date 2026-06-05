@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Shield, Loader2, Users, Key, UserCog } from 'lucide-react';
+import { Plus, Edit2, Trash2, Shield, Loader2, Users, Key, UserCog, LogOut } from 'lucide-react';
 import { Role, RoleCreate, RoleUpdate, Toast as ToastType, Permission } from '@/types';
 import { roleApi, permissionApi } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
@@ -7,14 +7,28 @@ import RoleForm from '@/components/RoleForm';
 import ConfirmModal from '@/components/ConfirmModal';
 import Toast from '@/components/Toast';
 import PermissionTree from '@/components/PermissionTree';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuthStore } from '@/store/authStore';
 
 export default function Roles() {
+  const { user, hasPermission, logout } = useAuthStore();
+  const navigate = useNavigate();
   const [roles, setRoles] = useState<Role[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const location = useLocation();
+
+  const canViewUserList = hasPermission('user:list');
+  const canCreateRole = hasPermission('role:create');
+  const canUpdateRole = hasPermission('role:update');
+  const canDeleteRole = hasPermission('role:delete');
+  const canAssignRole = hasPermission('role:assign');
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
@@ -190,30 +204,47 @@ export default function Roles() {
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
-              <UserCog className="text-white" size={28} />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
+                <UserCog className="text-white" size={28} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">用户管理系统</h1>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  管理用户、角色和权限
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">用户管理系统</h1>
-              <p className="text-sm text-gray-500 mt-0.5">
-                管理用户、角色和权限
-              </p>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-sm font-medium text-gray-900">{user?.name}</p>
+                <p className="text-xs text-gray-500">{user?.email}</p>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-150"
+                title="退出登录"
+              >
+                <LogOut size={18} />
+              </button>
             </div>
           </div>
 
           <div className="flex gap-1 bg-white p-1 rounded-xl shadow-lg w-fit">
-            <Link
-              to="/"
-              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                location.pathname === '/'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Users size={16} />
-              用户管理
-            </Link>
+            {canViewUserList && (
+              <Link
+                to="/"
+                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+                  location.pathname === '/'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <Users size={16} />
+                用户管理
+              </Link>
+            )}
             <Link
               to="/roles"
               className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
@@ -234,15 +265,17 @@ export default function Roles() {
               <h2 className="text-xl font-bold text-gray-900">角色列表</h2>
               <p className="text-sm text-gray-500 mt-0.5">共 {total} 个角色</p>
             </div>
-            <button
-              onClick={handleAddClick}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 text-white
-                         rounded-lg font-medium text-sm hover:bg-purple-700 hover:shadow-lg
-                         transition-all duration-200 hover:-translate-y-0.5"
-            >
-              <Plus size={18} />
-              新增角色
-            </button>
+            {canCreateRole && (
+              <button
+                onClick={handleAddClick}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 text-white
+                           rounded-lg font-medium text-sm hover:bg-purple-700 hover:shadow-lg
+                           transition-all duration-200 hover:-translate-y-0.5"
+              >
+                <Plus size={18} />
+                新增角色
+              </button>
+            )}
           </div>
         </div>
 
@@ -299,6 +332,9 @@ export default function Roles() {
                       用户数
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      权限数
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       状态
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -346,6 +382,12 @@ export default function Roles() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 text-sm text-gray-600">
+                          <Key size={14} />
+                          {role.permission_count || 0}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <span
                           className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
                             role.status === 'active'
@@ -368,30 +410,36 @@ export default function Roles() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => handlePermClick(role)}
-                            className="p-2 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50
-                                       rounded-lg transition-all duration-150"
-                            title="分配权限"
-                          >
-                            <Key size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleEditClick(role)}
-                            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50
-                                       rounded-lg transition-all duration-150"
-                            title="编辑"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteClick(role)}
-                            className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50
-                                       rounded-lg transition-all duration-150"
-                            title="删除"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {canAssignRole && (
+                            <button
+                              onClick={() => handlePermClick(role)}
+                              className="p-2 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50
+                                         rounded-lg transition-all duration-150"
+                              title="分配权限"
+                            >
+                              <Key size={16} />
+                            </button>
+                          )}
+                          {canUpdateRole && (
+                            <button
+                              onClick={() => handleEditClick(role)}
+                              className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50
+                                         rounded-lg transition-all duration-150"
+                              title="编辑"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                          )}
+                          {canDeleteRole && (
+                            <button
+                              onClick={() => handleDeleteClick(role)}
+                              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50
+                                         rounded-lg transition-all duration-150"
+                              title="删除"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -3,6 +3,7 @@ import cors from 'cors';
 import usersRouter from './routes/users';
 import rolesRouter from './routes/roles';
 import permissionsRouter from './routes/permissions';
+import authRouter from './routes/auth';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { initDatabase } from './database';
 
@@ -33,6 +34,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/roles', rolesRouter);
 app.use('/api/permissions', permissionsRouter);

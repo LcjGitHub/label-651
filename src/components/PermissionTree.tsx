@@ -64,10 +64,14 @@ const TreeNode = ({
           isChecked ? 'bg-blue-50/50' : ''
         }`}
         style={{ paddingLeft: `${level * 20 + 8}px` }}
+        onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
-          onClick={handleExpand}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleExpand();
+          }}
           className={`p-0.5 rounded hover:bg-gray-200 transition-colors ${
             hasChildren ? 'visible' : 'invisible'
           }`}
@@ -88,11 +92,15 @@ const TreeNode = ({
           )}
         </div>
 
-        <label className="flex items-center flex-1 cursor-pointer min-w-0">
+        <label
+          className="flex items-center flex-1 cursor-pointer min-w-0"
+          onClick={(e) => e.stopPropagation()}
+        >
           <input
             type="checkbox"
             checked={isChecked}
             onChange={handleCheckboxChange}
+            onClick={(e) => e.stopPropagation()}
             disabled={disabled}
             ref={(el) => {
               if (el) {

@@ -9,9 +9,31 @@ import {
   PermissionCreate,
   PermissionUpdate,
   ApiResponse,
+  LoginResponse,
 } from '@/types';
 
 const API_BASE_URL = '/api';
+
+let currentUserId: number | null = null;
+
+export const setCurrentUserId = (id: number | null) => {
+  currentUserId = id;
+  if (id) {
+    localStorage.setItem('current_user_id', String(id));
+  } else {
+    localStorage.removeItem('current_user_id');
+  }
+};
+
+export const getCurrentUserId = (): number | null => {
+  if (currentUserId !== null) return currentUserId;
+  const stored = localStorage.getItem('current_user_id');
+  if (stored) {
+    currentUserId = parseInt(stored);
+    return currentUserId;
+  }
+  return null;
+};
 
 const handleResponse = async <T>(response: Response): Promise<T> => {
   try {
@@ -33,12 +55,32 @@ const handleRequest = async <T>(
   options?: RequestInit
 ): Promise<T> => {
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (options?.headers) {
+      if (options.headers instanceof Headers) {
+        options.headers.forEach((value, key) => {
+          headers[key] = value;
+        });
+      } else if (Array.isArray(options.headers)) {
+        options.headers.forEach(([key, value]) => {
+          headers[key] = value;
+        });
+      } else {
+        Object.assign(headers, options.headers);
+      }
+    }
+
+    const userId = getCurrentUserId();
+    if (userId) {
+      headers['x-user-id'] = String(userId);
+    }
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+      headers,
     });
     return handleResponse<T>(response);
   } catch (err) {
@@ -211,6 +253,25 @@ export const permissionApi = {
     return handleRequest<ApiResponse>(`${API_BASE_URL}/permissions/${id}`, {
       method: 'DELETE',
     });
+  },
+};
+
+export const authApi = {
+  login: async (userId: number): Promise<ApiResponse<LoginResponse>> => {
+    return handleRequest<ApiResponse<LoginResponse>>(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId }),
+    });
+  },
+
+  getCurrentUser: async (): Promise<ApiResponse<LoginResponse>> => {
+    return handleRequest<ApiResponse<LoginResponse>>(`${API_BASE_URL}/auth/me`);
+  },
+
+  getLoginUsers: async (): Promise<ApiResponse<Pick<User, 'id' | 'name' | 'email'>[]>> => {
+    return handleRequest<ApiResponse<Pick<User, 'id' | 'name' | 'email'>[]>>(
+      `${API_BASE_URL}/auth/users`
+    );
   },
 };
 

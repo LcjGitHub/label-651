@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { getDb } from '../database';
 import { AppError } from '../middleware/errorHandler';
+import { AuthRequest, requireAuth, requirePermission } from '../middleware/auth';
 import { Role, RoleCreate, RoleUpdate, Permission, ApiResponse } from '../types';
 
 const router = Router();
@@ -49,7 +50,14 @@ const getRoleUserCount = (db: any, roleId: number): number => {
   return result.cnt;
 };
 
-router.get('/', (req: Request, res: Response, next: NextFunction) => {
+const getRolePermissionCount = (db: any, roleId: number): number => {
+  const result = db
+    .prepare('SELECT COUNT(*) as cnt FROM role_permissions WHERE role_id = ?')
+    .get(roleId) as { cnt: number };
+  return result.cnt;
+};
+
+router.get('/', requireAuth, requirePermission('role:list'), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const search = req.query.search as string;
@@ -77,6 +85,7 @@ router.get('/', (req: Request, res: Response, next: NextFunction) => {
     roles = roles.map((role) => ({
       ...role,
       user_count: getRoleUserCount(db, role.id),
+      permission_count: getRolePermissionCount(db, role.id),
     }));
 
     const response: ApiResponse<Role[]> = {
@@ -91,7 +100,7 @@ router.get('/', (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-router.get('/all', (req: Request, res: Response, next: NextFunction) => {
+router.get('/all', requireAuth, requirePermission('role:view'), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const roles = db
@@ -109,7 +118,7 @@ router.get('/all', (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-router.get('/:id', (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id', requireAuth, requirePermission('role:view'), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const id = parseInt(req.params.id);
@@ -140,7 +149,7 @@ router.get('/:id', (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-router.get('/:id/permissions', (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id/permissions', requireAuth, requirePermission('role:view'), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const id = parseInt(req.params.id);
@@ -170,7 +179,7 @@ router.get('/:id/permissions', (req: Request, res: Response, next: NextFunction)
   }
 });
 
-router.post('/', (req: Request, res: Response, next: NextFunction) => {
+router.post('/', requireAuth, requirePermission('role:create'), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const { name, code, description, status, permission_ids } = req.body as RoleCreate;
@@ -248,7 +257,7 @@ router.post('/', (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-router.put('/:id', (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id', requireAuth, requirePermission('role:update'), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const id = parseInt(req.params.id);
@@ -358,7 +367,7 @@ router.put('/:id', (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-router.put('/:id/permissions', (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id/permissions', requireAuth, requirePermission('role:assign'), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const id = parseInt(req.params.id);
@@ -408,7 +417,7 @@ router.put('/:id/permissions', (req: Request, res: Response, next: NextFunction)
   }
 });
 
-router.delete('/:id', (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:id', requireAuth, requirePermission('role:delete'), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const id = parseInt(req.params.id);

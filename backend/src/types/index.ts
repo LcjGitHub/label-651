@@ -35,6 +35,13 @@ export interface Role {
   updated_at: string;
   permissions?: Permission[];
   user_count?: number;
+  permission_count?: number;
+}
+
+export interface LoginResponse {
+  user: User;
+  roles: string[];
+  permissions: string[];
 }
 
 export interface RoleCreate {

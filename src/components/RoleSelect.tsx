@@ -93,6 +93,7 @@ export default function RoleSelect({
               {role.name}
               {!disabled && (
                 <button
+                  type="button"
                   onClick={(e) => handleRemove(role.id, e)}
                   className="ml-1 hover:bg-blue-200 rounded-full p-0.5 transition-colors"
                 >

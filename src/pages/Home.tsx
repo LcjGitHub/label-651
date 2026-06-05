@@ -1,14 +1,17 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Users, Loader2, Shield, UserCog } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, Loader2, Shield, UserCog, LogOut } from 'lucide-react';
 import { User, UserCreate, UserUpdate, Toast as ToastType } from '@/types';
 import { userApi } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
 import UserForm from '@/components/UserForm';
 import ConfirmModal from '@/components/ConfirmModal';
 import Toast from '@/components/Toast';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuthStore } from '@/store/authStore';
 
 export default function Home() {
+  const { user, hasPermission, logout } = useAuthStore();
+  const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -17,6 +20,16 @@ export default function Home() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+
+  const canViewRoleList = hasPermission('role:list');
+  const canCreateUser = hasPermission('user:create');
+  const canUpdateUser = hasPermission('user:update');
+  const canDeleteUser = hasPermission('user:delete');
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
@@ -138,15 +151,30 @@ export default function Home() {
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
-              <UserCog className="text-white" size={28} />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
+                <UserCog className="text-white" size={28} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">用户管理系统</h1>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  管理用户、角色和权限
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">用户管理系统</h1>
-              <p className="text-sm text-gray-500 mt-0.5">
-                管理用户、角色和权限
-              </p>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-sm font-medium text-gray-900">{user?.name}</p>
+                <p className="text-xs text-gray-500">{user?.email}</p>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-150"
+                title="退出登录"
+              >
+                <LogOut size={18} />
+              </button>
             </div>
           </div>
 
@@ -162,17 +190,19 @@ export default function Home() {
               <Users size={16} />
               用户管理
             </Link>
-            <Link
-              to="/roles"
-              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                location.pathname === '/roles'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Shield size={16} />
-              角色管理
-            </Link>
+            {canViewRoleList && (
+              <Link
+                to="/roles"
+                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+                  location.pathname === '/roles'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <Shield size={16} />
+                角色管理
+              </Link>
+            )}
           </div>
         </div>
 
@@ -184,15 +214,17 @@ export default function Home() {
                 共 {total} 位用户
               </p>
             </div>
-            <button
-              onClick={handleAddClick}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white
-                         rounded-lg font-medium text-sm hover:bg-blue-700 hover:shadow-lg
-                         transition-all duration-200 hover:-translate-y-0.5"
-            >
-              <Plus size={18} />
-              新增用户
-            </button>
+            {canCreateUser && (
+              <button
+                onClick={handleAddClick}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white
+                           rounded-lg font-medium text-sm hover:bg-blue-700 hover:shadow-lg
+                           transition-all duration-200 hover:-translate-y-0.5"
+              >
+                <Plus size={18} />
+                新增用户
+              </button>
+            )}
           </div>
         </div>
 
@@ -331,22 +363,26 @@ export default function Home() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => handleEditClick(user)}
-                            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50
-                                       rounded-lg transition-all duration-150"
-                            title="编辑"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteClick(user)}
-                            className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50
-                                       rounded-lg transition-all duration-150"
-                            title="删除"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {canUpdateUser && (
+                            <button
+                              onClick={() => handleEditClick(user)}
+                              className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50
+                                         rounded-lg transition-all duration-150"
+                              title="编辑"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                          )}
+                          {canDeleteUser && (
+                            <button
+                              onClick={() => handleDeleteClick(user)}
+                              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50
+                                         rounded-lg transition-all duration-150"
+                              title="删除"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

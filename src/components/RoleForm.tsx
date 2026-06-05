@@ -2,7 +2,7 @@ import { X, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Role, RoleCreate, RoleUpdate, Permission } from '@/types';
 import PermissionTree from './PermissionTree';
-import { permissionApi } from '@/services/api';
+import { permissionApi, roleApi } from '@/services/api';
 
 interface RoleFormProps {
   isOpen: boolean;
@@ -57,38 +57,38 @@ export default function RoleForm({
   }, [isOpen]);
 
   useEffect(() => {
-    if (role) {
-      setFormData({
-        name: role.name,
-        code: role.code,
-        description: role.description,
-        status: role.status,
-        permission_ids: role.permissions ? [] : [],
-      });
-      const collectIds = (perms: Permission[]): number[] => {
-        let ids: number[] = [];
-        perms.forEach((p) => {
-          ids.push(p.id);
-          if (p.children) {
-            ids = ids.concat(collectIds(p.children));
-          }
+    const loadRoleData = async () => {
+      if (role && isOpen) {
+        setFormData({
+          name: role.name,
+          code: role.code,
+          description: role.description,
+          status: role.status,
+          permission_ids: [],
         });
-        return ids;
-      };
-      if (role.permissions) {
-        setSelectedPermissionIds(collectIds(role.permissions));
+
+        try {
+          const response = await roleApi.getRolePermissions(role.id);
+          if (response.success && response.data) {
+            setSelectedPermissionIds(response.data.permission_ids);
+          }
+        } catch (err) {
+          console.error('加载角色权限失败:', err);
+        }
+      } else {
+        setFormData({
+          name: '',
+          code: '',
+          description: '',
+          status: 'active',
+          permission_ids: [],
+        });
+        setSelectedPermissionIds([]);
       }
-    } else {
-      setFormData({
-        name: '',
-        code: '',
-        description: '',
-        status: 'active',
-        permission_ids: [],
-      });
-      setSelectedPermissionIds([]);
-    }
-    setErrors({});
+      setErrors({});
+    };
+
+    loadRoleData();
   }, [role, isOpen]);
 
   useEffect(() => {
