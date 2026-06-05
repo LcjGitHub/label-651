@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Users, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, Loader2, Shield, UserCog } from 'lucide-react';
 import { User, UserCreate, UserUpdate, Toast as ToastType } from '@/types';
 import { userApi } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
 import UserForm from '@/components/UserForm';
 import ConfirmModal from '@/components/ConfirmModal';
 import Toast from '@/components/Toast';
+import { Link, useLocation } from 'react-router-dom';
 
 export default function Home() {
   const [users, setUsers] = useState<User[]>([]);
@@ -22,6 +23,7 @@ export default function Home() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [toasts, setToasts] = useState<ToastType[]>([]);
+  const location = useLocation();
 
   const fetchUsers = useCallback(async (search?: string) => {
     try {
@@ -135,18 +137,52 @@ export default function Home() {
       <Toast toasts={toasts} onRemove={removeToast} />
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
+              <UserCog className="text-white" size={28} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">用户管理系统</h1>
+              <p className="text-sm text-gray-500 mt-0.5">
+                管理用户、角色和权限
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-1 bg-white p-1 rounded-xl shadow-lg w-fit">
+            <Link
+              to="/"
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+                location.pathname === '/'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Users size={16} />
+              用户管理
+            </Link>
+            <Link
+              to="/roles"
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+                location.pathname === '/roles'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Shield size={16} />
+              角色管理
+            </Link>
+          </div>
+        </div>
+
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
-                <Users className="text-white" size={28} />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">用户管理系统</h1>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  共 {total} 位用户
-                </p>
-              </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">用户列表</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                共 {total} 位用户
+              </p>
             </div>
             <button
               onClick={handleAddClick}
@@ -210,6 +246,9 @@ export default function Home() {
                       手机号
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      角色
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       状态
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -247,6 +286,27 @@ export default function Home() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {user.phone || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-wrap gap-1">
+                          {user.roles && user.roles.length > 0 ? (
+                            user.roles.map((role) => (
+                              <span
+                                key={role.id}
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  role.status === 'active'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-500'
+                                }`}
+                              >
+                                <Shield size={10} className="mr-1" />
+                                {role.name}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-gray-400 text-sm">未分配</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span

@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import usersRouter from './routes/users';
+import rolesRouter from './routes/roles';
+import permissionsRouter from './routes/permissions';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { initDatabase } from './database';
 
@@ -32,6 +34,8 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/users', usersRouter);
+app.use('/api/roles', rolesRouter);
+app.use('/api/permissions', permissionsRouter);
 
 app.use(notFound);
 app.use(errorHandler);
@@ -43,6 +47,8 @@ const startServer = () => {
       console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
       console.log(`📚 API 文档: GET /api/health`);
       console.log(`👥 用户接口: GET /api/users`);
+      console.log(`🎭 角色接口: GET /api/roles`);
+      console.log(`🔐 权限接口: GET /api/permissions`);
     });
   } catch (err) {
     console.error('启动服务器失败:', err);

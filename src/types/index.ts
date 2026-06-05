@@ -6,6 +6,7 @@ export interface User {
   status: 'active' | 'inactive';
   created_at: string;
   updated_at: string;
+  roles?: Role[];
 }
 
 export interface UserCreate {
@@ -13,6 +14,7 @@ export interface UserCreate {
   email: string;
   phone: string;
   status: 'active' | 'inactive';
+  role_ids?: number[];
 }
 
 export interface UserUpdate {
@@ -20,6 +22,75 @@ export interface UserUpdate {
   email?: string;
   phone?: string;
   status?: 'active' | 'inactive';
+  role_ids?: number[];
+}
+
+export interface Role {
+  id: number;
+  name: string;
+  code: string;
+  description: string;
+  status: 'active' | 'inactive';
+  created_at: string;
+  updated_at: string;
+  permissions?: Permission[];
+  user_count?: number;
+}
+
+export interface RoleCreate {
+  name: string;
+  code: string;
+  description?: string;
+  status: 'active' | 'inactive';
+  permission_ids?: number[];
+}
+
+export interface RoleUpdate {
+  name?: string;
+  code?: string;
+  description?: string;
+  status?: 'active' | 'inactive';
+  permission_ids?: number[];
+}
+
+export interface Permission {
+  id: number;
+  name: string;
+  code: string;
+  type: 'menu' | 'action';
+  parent_id: number;
+  path?: string;
+  component?: string;
+  icon?: string;
+  sort_order: number;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+  children?: Permission[];
+}
+
+export interface PermissionCreate {
+  name: string;
+  code: string;
+  type: 'menu' | 'action';
+  parent_id?: number;
+  path?: string;
+  component?: string;
+  icon?: string;
+  sort_order?: number;
+  description?: string;
+}
+
+export interface PermissionUpdate {
+  name?: string;
+  code?: string;
+  type?: 'menu' | 'action';
+  parent_id?: number;
+  path?: string;
+  component?: string;
+  icon?: string;
+  sort_order?: number;
+  description?: string;
 }
 
 export interface ApiResponse<T = unknown> {

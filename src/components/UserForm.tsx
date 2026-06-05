@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { User, UserCreate, UserUpdate } from '@/types';
+import RoleSelect from './RoleSelect';
 
 interface UserFormProps {
   isOpen: boolean;
@@ -23,11 +24,12 @@ export default function UserForm({
   user,
   isLoading = false,
 }: UserFormProps) {
-  const [formData, setFormData] = useState<UserCreate>({
+  const [formData, setFormData] = useState<UserCreate & { role_ids: number[] }>({
     name: '',
     email: '',
     phone: '',
     status: 'active',
+    role_ids: [],
   });
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -38,6 +40,7 @@ export default function UserForm({
         email: user.email,
         phone: user.phone,
         status: user.status,
+        role_ids: user.roles?.map((r) => r.id) || [],
       });
     } else {
       setFormData({
@@ -45,6 +48,7 @@ export default function UserForm({
         email: '',
         phone: '',
         status: 'active',
+        role_ids: [],
       });
     }
     setErrors({});
@@ -108,6 +112,10 @@ export default function UserForm({
     if (errors[name as keyof FormErrors]) {
       setErrors((prev) => ({ ...prev, [name]: undefined }));
     }
+  };
+
+  const handleRoleChange = (roleIds: number[]) => {
+    setFormData((prev) => ({ ...prev, role_ids: roleIds }));
   };
 
   if (!isOpen) return null;
@@ -223,6 +231,18 @@ export default function UserForm({
               <option value="active">启用</option>
               <option value="inactive">禁用</option>
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              分配角色
+            </label>
+            <RoleSelect
+              selectedRoleIds={formData.role_ids}
+              onChange={handleRoleChange}
+              disabled={isLoading}
+              placeholder="请选择用户角色"
+            />
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
