@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { db } from '../database';
+import { getDb } from '../database';
 import { AppError } from '../middleware/errorHandler';
 import { User, UserCreate, UserUpdate, ApiResponse } from '../types';
 
@@ -15,23 +15,29 @@ const validatePhone = (phone: string): boolean => {
   return phoneRegex.test(phone);
 };
 
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', (req: Request, res: Response, next: NextFunction) => {
   try {
+    const db = getDb();
     const search = req.query.search as string;
     let users: User[];
     let total: number;
 
     if (search && search.trim()) {
       const searchTerm = `%${search.trim()}%`;
-      users = await db.all<User>(
-        'SELECT * FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC',
-        [searchTerm, searchTerm]
-      );
+      users = db
+        .prepare(
+          'SELECT * FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC'
+        )
+        .all(searchTerm, searchTerm) as User[];
       total = users.length;
     } else {
-      users = await db.all<User>('SELECT * FROM users ORDER BY created_at DESC');
-      const countResult = await db.get<{ cnt: number }>('SELECT COUNT(*) as cnt FROM users');
-      total = countResult?.cnt || 0;
+      users = db
+        .prepare('SELECT * FROM users ORDER BY created_at DESC')
+        .all() as User[];
+      const countResult = db
+        .prepare('SELECT COUNT(*) as cnt FROM users')
+        .get() as { cnt: number };
+      total = countResult.cnt;
     }
 
     const response: ApiResponse<User[]> = {
@@ -46,14 +52,17 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
+    const db = getDb();
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       throw new AppError('无效的用户ID', 400);
     }
 
-    const user = await db.get<User>('SELECT * FROM users WHERE id = ?', [id]);
+    const user = db
+      .prepare('SELECT * FROM users WHERE id = ?')
+      .get(id) as User;
 
     if (!user) {
       throw new AppError('用户不存在', 404);
@@ -70,8 +79,9 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-router.post('/', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', (req: Request, res: Response, next: NextFunction) => {
   try {
+    const db = getDb();
     const { name, email, phone, status } = req.body as UserCreate;
 
     if (!name || !name.trim()) {
@@ -90,12 +100,20 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       throw new AppError('状态值不正确', 400);
     }
 
-    const result = await db.run(
-      'INSERT INTO users (name, email, phone, status) VALUES (?, ?, ?, ?)',
-      [name.trim(), email.trim(), phone || '', status || 'active']
-    );
+    const result = db
+      .prepare(
+        'INSERT INTO users (name, email, phone, status) VALUES (?, ?, ?, ?)'
+      )
+      .run(
+        name.trim(),
+        email.trim(),
+        phone || '',
+        status || 'active'
+      );
 
-    const user = await db.get<User>('SELECT * FROM users WHERE id = ?', [result.lastID]);
+    const user = db
+      .prepare('SELECT * FROM users WHERE id = ?')
+      .get(result.lastInsertRowid) as User;
 
     const response: ApiResponse<User> = {
       success: true,
@@ -109,14 +127,17 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
+    const db = getDb();
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       throw new AppError('无效的用户ID', 400);
     }
 
-    const existingUser = await db.get<User>('SELECT * FROM users WHERE id = ?', [id]);
+    const existingUser = db
+      .prepare('SELECT * FROM users WHERE id = ?')
+      .get(id) as User;
 
     if (!existingUser) {
       throw new AppError('用户不存在', 404);
@@ -161,9 +182,11 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
     updateValues.push(id);
 
     const sql = `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`;
-    await db.run(sql, updateValues);
+    db.prepare(sql).run(...updateValues);
 
-    const updatedUser = await db.get<User>('SELECT * FROM users WHERE id = ?', [id]);
+    const updatedUser = db
+      .prepare('SELECT * FROM users WHERE id = ?')
+      .get(id) as User;
 
     const response: ApiResponse<User> = {
       success: true,
@@ -177,20 +200,23 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
+    const db = getDb();
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       throw new AppError('无效的用户ID', 400);
     }
 
-    const existingUser = await db.get<User>('SELECT * FROM users WHERE id = ?', [id]);
+    const existingUser = db
+      .prepare('SELECT * FROM users WHERE id = ?')
+      .get(id) as User;
 
     if (!existingUser) {
       throw new AppError('用户不存在', 404);
     }
 
-    await db.run('DELETE FROM users WHERE id = ?', [id]);
+    db.prepare('DELETE FROM users WHERE id = ?').run(id);
 
     const response: ApiResponse = {
       success: true,

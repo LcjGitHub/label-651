@@ -52,10 +52,13 @@ export default function Home() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    fetchUsers(query);
-  };
+  const handleSearch = useCallback(
+    (query: string) => {
+      setSearchQuery(query);
+      fetchUsers(query);
+    },
+    [fetchUsers]
+  );
 
   const handleAddClick = () => {
     setEditingUser(null);

@@ -1,5 +1,5 @@
 import { Search, X } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 interface SearchBarProps {
   onSearch: (query: string) => void;
@@ -8,25 +8,27 @@ interface SearchBarProps {
 
 export default function SearchBar({ onSearch, placeholder = '搜索姓名或邮箱...' }: SearchBarProps) {
   const [value, setValue] = useState('');
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const debouncedSearch = useCallback(
-    (() => {
-      let timeoutId: ReturnType<typeof setTimeout>;
-      return (query: string) => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-          onSearch(query);
-        }, 300);
-      };
-    })(),
+    (query: string) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => {
+        onSearch(query);
+      }, 300);
+    },
     [onSearch]
   );
 
   useEffect(() => {
     return () => {
-      debouncedSearch('');
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
     };
-  }, [debouncedSearch]);
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
