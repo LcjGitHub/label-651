@@ -107,6 +107,35 @@ export interface ApiResponse<T = unknown> {
   total?: number;
 }
 
+export type OperationType = 'CREATE' | 'UPDATE' | 'DELETE';
+
+export interface OperationLog {
+  id: number;
+  operator_id: number;
+  operator_name: string;
+  operation_type: OperationType;
+  module: string;
+  detail: string;
+  ip_address: string;
+  created_at: string;
+}
+
+export interface OperationLogDetail {
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  changes?: Record<string, { old: unknown; new: unknown }>;
+}
+
+export interface OperationLogQuery {
+  operator_id?: number;
+  operation_type?: OperationType;
+  module?: string;
+  start_time?: string;
+  end_time?: string;
+  page?: number;
+  page_size?: number;
+}
+
 export interface Toast {
   id: number;
   type: 'success' | 'error' | 'info';

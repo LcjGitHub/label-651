@@ -4,6 +4,7 @@ import usersRouter from './routes/users';
 import rolesRouter from './routes/roles';
 import permissionsRouter from './routes/permissions';
 import authRouter from './routes/auth';
+import operationLogsRouter from './routes/operationLogs';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { initDatabase } from './database';
 
@@ -38,6 +39,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/roles', rolesRouter);
 app.use('/api/permissions', permissionsRouter);
+app.use('/api/operation-logs', operationLogsRouter);
 
 app.use(notFound);
 app.use(errorHandler);

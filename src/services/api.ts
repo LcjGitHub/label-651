@@ -10,6 +10,8 @@ import {
   PermissionUpdate,
   ApiResponse,
   LoginResponse,
+  OperationLog,
+  OperationLogQuery,
 } from '@/types';
 
 const API_BASE_URL = '/api';
@@ -271,6 +273,37 @@ export const authApi = {
   getLoginUsers: async (): Promise<ApiResponse<Pick<User, 'id' | 'name' | 'email'>[]>> => {
     return handleRequest<ApiResponse<Pick<User, 'id' | 'name' | 'email'>[]>>(
       `${API_BASE_URL}/auth/users`
+    );
+  },
+};
+
+export const operationLogApi = {
+  getLogs: async (params?: OperationLogQuery): Promise<ApiResponse<OperationLog[]>> => {
+    let url = `${API_BASE_URL}/operation-logs`;
+    if (params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          searchParams.append(key, String(value));
+        }
+      });
+      const queryString = searchParams.toString();
+      if (queryString) url += `?${queryString}`;
+    }
+    return handleRequest<ApiResponse<OperationLog[]>>(url);
+  },
+
+  getLog: async (id: number): Promise<ApiResponse<OperationLog>> => {
+    return handleRequest<ApiResponse<OperationLog>>(`${API_BASE_URL}/operation-logs/${id}`);
+  },
+
+  getModules: async (): Promise<ApiResponse<string[]>> => {
+    return handleRequest<ApiResponse<string[]>>(`${API_BASE_URL}/operation-logs/modules`);
+  },
+
+  getOperators: async (): Promise<ApiResponse<{ id: number; name: string }[]>> => {
+    return handleRequest<ApiResponse<{ id: number; name: string }[]>>(
+      `${API_BASE_URL}/operation-logs/operators`
     );
   },
 };

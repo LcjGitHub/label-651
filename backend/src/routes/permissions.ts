@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { getDb } from '../database';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest, requireAuth, requirePermission } from '../middleware/auth';
+import { withOperationLog, getRecordById, getDataFromResponse } from '../middleware/operationLog';
 import { Permission, PermissionCreate, PermissionUpdate, ApiResponse } from '../types';
 
 const router = Router();
@@ -112,7 +113,13 @@ router.get('/:id', requireAuth, requirePermission('role:view'), (req: AuthReques
   }
 });
 
-router.post('/', requireAuth, requirePermission('role:create'), (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/', requireAuth, requirePermission('role:create'),
+  withOperationLog({
+    module: '权限管理',
+    operationType: 'CREATE',
+    getAfterData: async (req, res) => getDataFromResponse(res),
+  }),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const {
@@ -186,7 +193,17 @@ router.post('/', requireAuth, requirePermission('role:create'), (req: AuthReques
   }
 });
 
-router.put('/:id', requireAuth, requirePermission('role:update'), (req: AuthRequest, res: Response, next: NextFunction) => {
+router.put('/:id', requireAuth, requirePermission('role:update'),
+  withOperationLog({
+    module: '权限管理',
+    operationType: 'UPDATE',
+    getBeforeData: async (req) => {
+      const id = parseInt(req.params.id);
+      return getRecordById('permissions', id);
+    },
+    getAfterData: async (req, res) => getDataFromResponse(res),
+  }),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const id = parseInt(req.params.id);
@@ -311,7 +328,16 @@ router.put('/:id', requireAuth, requirePermission('role:update'), (req: AuthRequ
   }
 });
 
-router.delete('/:id', requireAuth, requirePermission('role:delete'), (req: AuthRequest, res: Response, next: NextFunction) => {
+router.delete('/:id', requireAuth, requirePermission('role:delete'),
+  withOperationLog({
+    module: '权限管理',
+    operationType: 'DELETE',
+    getBeforeData: async (req) => {
+      const id = parseInt(req.params.id);
+      return getRecordById('permissions', id);
+    },
+  }),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const id = parseInt(req.params.id);

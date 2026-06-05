@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useEffect, useState } from 'react';
 import Home from '@/pages/Home';
 import Roles from '@/pages/Roles';
+import OperationLogs from '@/pages/OperationLogs';
 import Login from '@/pages/Login';
 import { useAuthStore } from '@/store/authStore';
 import { getCurrentUserId } from '@/services/api';
@@ -55,6 +56,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Roles />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/operation-logs"
+          element={
+            <ProtectedRoute>
+              <OperationLogs />
             </ProtectedRoute>
           }
         />

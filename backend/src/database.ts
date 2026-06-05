@@ -94,6 +94,22 @@ export const initDatabase = (): DatabaseSync => {
 
     CREATE INDEX IF NOT EXISTS idx_role_permissions_role ON role_permissions(role_id);
     CREATE INDEX IF NOT EXISTS idx_role_permissions_permission ON role_permissions(permission_id);
+
+    CREATE TABLE IF NOT EXISTS operation_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      operator_id INTEGER NOT NULL,
+      operator_name VARCHAR(100) NOT NULL,
+      operation_type VARCHAR(20) NOT NULL CHECK(operation_type IN ('CREATE', 'UPDATE', 'DELETE')),
+      module VARCHAR(50) NOT NULL,
+      detail TEXT,
+      ip_address VARCHAR(50),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_operation_logs_operator ON operation_logs(operator_id);
+    CREATE INDEX IF NOT EXISTS idx_operation_logs_type ON operation_logs(operation_type);
+    CREATE INDEX IF NOT EXISTS idx_operation_logs_module ON operation_logs(module);
+    CREATE INDEX IF NOT EXISTS idx_operation_logs_created ON operation_logs(created_at);
   `);
 
   const count = db.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number };

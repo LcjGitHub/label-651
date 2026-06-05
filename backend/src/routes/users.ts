@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { getDb } from '../database';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest, requireAuth, requirePermission } from '../middleware/auth';
+import { withOperationLog, getRecordById, getDataFromResponse } from '../middleware/operationLog';
 import { User, UserCreate, UserUpdate, Role, ApiResponse } from '../types';
 
 const router = Router();
@@ -98,7 +99,13 @@ router.get('/:id', requireAuth, requirePermission('user:view'), (req: AuthReques
   }
 });
 
-router.post('/', requireAuth, requirePermission('user:create'), (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/', requireAuth, requirePermission('user:create'), 
+  withOperationLog({
+    module: '用户管理',
+    operationType: 'CREATE',
+    getAfterData: async (req, res) => getDataFromResponse(res),
+  }),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const { name, email, phone, status, role_ids } = req.body as UserCreate;
@@ -166,7 +173,17 @@ router.post('/', requireAuth, requirePermission('user:create'), (req: AuthReques
   }
 });
 
-router.put('/:id', requireAuth, requirePermission('user:update'), (req: AuthRequest, res: Response, next: NextFunction) => {
+router.put('/:id', requireAuth, requirePermission('user:update'),
+  withOperationLog({
+    module: '用户管理',
+    operationType: 'UPDATE',
+    getBeforeData: async (req) => {
+      const id = parseInt(req.params.id);
+      return getRecordById('users', id);
+    },
+    getAfterData: async (req, res) => getDataFromResponse(res),
+  }),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const id = parseInt(req.params.id);
@@ -344,7 +361,16 @@ router.put('/:id/roles', requireAuth, requirePermission('user:update'), (req: Au
   }
 });
 
-router.delete('/:id', requireAuth, requirePermission('user:delete'), (req: AuthRequest, res: Response, next: NextFunction) => {
+router.delete('/:id', requireAuth, requirePermission('user:delete'),
+  withOperationLog({
+    module: '用户管理',
+    operationType: 'DELETE',
+    getBeforeData: async (req) => {
+      const id = parseInt(req.params.id);
+      return getRecordById('users', id);
+    },
+  }),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const id = parseInt(req.params.id);
