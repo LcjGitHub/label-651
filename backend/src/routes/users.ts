@@ -1,8 +1,13 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Response, NextFunction } from 'express';
+import * as XLSX from 'xlsx';
+import path from 'path';
+import fs from 'fs';
+import { DatabaseSync } from 'node:sqlite';
 import { getDb } from '../database';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest, requireAuth, requirePermission } from '../middleware/auth';
-import { User, UserCreate, UserUpdate, Role, ApiResponse } from '../types';
+import { upload, exportsDir } from '../middleware/upload';
+import { User, UserCreate, UserUpdate, Role, ApiResponse, ImportHistory, ImportResult } from '../types';
 
 const router = Router();
 
@@ -16,7 +21,7 @@ const validatePhone = (phone: string): boolean => {
   return phoneRegex.test(phone);
 };
 
-const getUserRoles = (db: any, userId: number): Role[] => {
+const getUserRoles = (db: DatabaseSync, userId: number): Role[] => {
   return db
     .prepare(
       `SELECT r.* FROM roles r
@@ -377,6 +382,331 @@ router.delete('/:id', requireAuth, requirePermission('user:delete'),
     const response: ApiResponse = {
       success: true,
       message: '用户删除成功',
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+interface ImportRow {
+  name?: string;
+  email?: string;
+  phone?: string;
+  status?: string;
+}
+
+type SheetRow = Record<string, unknown>;
+
+const parseImportFile = (filePath: string): ImportRow[] => {
+  const workbook = XLSX.readFile(filePath);
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+  const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' }) as SheetRow[];
+
+  return jsonData.map((row: SheetRow) => ({
+    name: String(row['姓名'] ?? row['name'] ?? row['Name'] ?? ''),
+    email: String(row['邮箱'] ?? row['email'] ?? row['Email'] ?? ''),
+    phone: String(row['手机号'] ?? row['phone'] ?? row['Phone'] ?? ''),
+    status: String(row['状态'] ?? row['status'] ?? row['Status'] ?? 'active'),
+  }));
+};
+
+const validateImportRow = (row: ImportRow, index: number): { valid: boolean; reason?: string } => {
+  if (!row.name || String(row.name).trim() === '') {
+    return { valid: false, reason: `第${index + 2}行：姓名不能为空` };
+  }
+  if (!row.email || String(row.email).trim() === '') {
+    return { valid: false, reason: `第${index + 2}行：邮箱不能为空` };
+  }
+  if (!validateEmail(String(row.email))) {
+    return { valid: false, reason: `第${index + 2}行：邮箱格式不正确` };
+  }
+  if (row.phone && String(row.phone).trim() !== '' && !validatePhone(String(row.phone))) {
+    return { valid: false, reason: `第${index + 2}行：手机号格式不正确` };
+  }
+  if (row.status && !['active', 'inactive'].includes(String(row.status))) {
+    return { valid: false, reason: `第${index + 2}行：状态值只能是 active 或 inactive` };
+  }
+  return { valid: true };
+};
+
+interface MulterRequest extends AuthRequest {
+  file?: Express.Multer.File;
+}
+
+router.post('/import', requireAuth, requirePermission('user:import'),
+  upload.single('file'),
+  (req: MulterRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+    const file = req.file;
+    if (!file) {
+      throw new AppError('请选择要上传的文件', 400);
+    }
+
+    if (!req.userId) {
+      throw new AppError('未授权，请先登录', 401);
+    }
+
+    const operator = db
+      .prepare('SELECT id, name FROM users WHERE id = ?')
+      .get(req.userId) as { id: number; name: string } | undefined;
+
+    let rows: ImportRow[] = [];
+    const filePath = file.path;
+    try {
+      rows = parseImportFile(filePath);
+    } catch {
+      fs.unlinkSync(filePath);
+      throw new AppError('文件解析失败，请检查文件格式', 400);
+    }
+
+    if (rows.length === 0) {
+      fs.unlinkSync(filePath);
+      throw new AppError('文件内容为空', 400);
+    }
+
+    const failReasons: { row: number; reason: string }[] = [];
+    const validRows: (ImportRow & { _rowIndex: number })[] = [];
+
+    rows.forEach((row, index) => {
+      const validation = validateImportRow(row, index);
+      if (!validation.valid && validation.reason) {
+        failReasons.push({ row: index + 2, reason: validation.reason });
+      } else {
+        validRows.push({ ...row, _rowIndex: index });
+      }
+    });
+
+    const insertUser = db.prepare(
+      'INSERT OR IGNORE INTO users (name, email, phone, status) VALUES (?, ?, ?, ?)'
+    );
+
+    let successCount = 0;
+    const realFailReasons = [...failReasons];
+
+    db.exec('BEGIN TRANSACTION');
+    try {
+      for (const row of validRows) {
+        try {
+          const result = insertUser.run(
+            String(row.name).trim(),
+            String(row.email).trim(),
+            row.phone ? String(row.phone).trim() : '',
+            row.status || 'active'
+          );
+          if (result.changes > 0) {
+            successCount++;
+          } else {
+            realFailReasons.push({
+              row: row._rowIndex + 2,
+              reason: `第${row._rowIndex + 2}行：邮箱已存在`,
+            });
+          }
+        } catch (innerErr) {
+          realFailReasons.push({
+            row: row._rowIndex + 2,
+            reason: `第${row._rowIndex + 2}行：${innerErr instanceof Error ? innerErr.message : '导入失败'}`,
+          });
+        }
+      }
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      fs.unlinkSync(filePath);
+      throw err;
+    }
+
+    try {
+      fs.unlinkSync(filePath);
+    } catch {
+      // ignore file deletion error
+    }
+
+    const importResult: ImportResult = {
+      total: rows.length,
+      success: successCount,
+      fail: realFailReasons.length,
+      failReasons: realFailReasons,
+    };
+
+    try {
+      db
+        .prepare(
+          `INSERT INTO import_history 
+           (operator_id, operator_name, module, file_name, file_size, total_count, success_count, fail_count, fail_reasons, status, ip_address)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          req.userId,
+          operator?.name || '未知用户',
+          'users',
+          file.originalname,
+          file.size,
+          rows.length,
+          successCount,
+          realFailReasons.length,
+          JSON.stringify(realFailReasons),
+          'completed',
+          req.ip || ''
+        );
+    } catch (logErr) {
+      console.error('记录导入历史失败:', logErr);
+    }
+
+    const response: ApiResponse<ImportResult> = {
+      success: true,
+      data: importResult,
+      message: `导入完成：成功${successCount}条，失败${realFailReasons.length}条`,
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/export', requireAuth, requirePermission('user:export'),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+    const { search, ids } = req.body as { search?: string; ids?: number[] };
+
+    let users: User[] = [];
+
+    if (ids && Array.isArray(ids) && ids.length > 0) {
+      const placeholders = ids.map(() => '?').join(',');
+      users = db
+        .prepare(`SELECT * FROM users WHERE id IN (${placeholders}) ORDER BY created_at DESC`)
+        .all(...ids) as unknown as User[];
+    } else if (search && search.trim()) {
+      const searchTerm = `%${search.trim()}%`;
+      users = db
+        .prepare(
+          'SELECT * FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC'
+        )
+        .all(searchTerm, searchTerm) as unknown as User[];
+    } else {
+      users = db
+        .prepare('SELECT * FROM users ORDER BY created_at DESC')
+        .all() as unknown as User[];
+    }
+
+    const exportData = users.map((user) => ({
+      编号: user.id,
+      姓名: user.name,
+      邮箱: user.email,
+      手机号: user.phone || '',
+      状态: user.status === 'active' ? '启用' : '禁用',
+      创建时间: user.created_at,
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    worksheet['!cols'] = [
+      { wch: 8 },
+      { wch: 16 },
+      { wch: 30 },
+      { wch: 16 },
+      { wch: 10 },
+      { wch: 20 },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, '用户列表');
+
+    const timestamp = Date.now();
+    const fileName = `users-export-${timestamp}.xlsx`;
+    const filePath = path.join(exportsDir, fileName);
+
+    XLSX.writeFile(workbook, filePath);
+
+    const downloadUrl = `/api/exports/${fileName}`;
+
+    const response: ApiResponse<{ downloadUrl: string; fileName: string; count: number }> = {
+      success: true,
+      data: {
+        downloadUrl,
+        fileName,
+        count: users.length,
+      },
+      message: `导出成功，共${users.length}条数据`,
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/export/template', requireAuth, requirePermission('user:export'),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const templateData = [
+      {
+        姓名: '张三',
+        邮箱: 'zhangsan@example.com',
+        手机号: '13800138001',
+        状态: 'active',
+      },
+      {
+        姓名: '李四',
+        邮箱: 'lisi@example.com',
+        手机号: '',
+        状态: 'inactive',
+      },
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    worksheet['!cols'] = [
+      { wch: 16 },
+      { wch: 30 },
+      { wch: 16 },
+      { wch: 10 },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, '导入模板');
+
+    const timestamp = Date.now();
+    const fileName = `users-import-template-${timestamp}.xlsx`;
+    const filePath = path.join(exportsDir, fileName);
+
+    XLSX.writeFile(workbook, filePath);
+
+    const downloadUrl = `/api/exports/${fileName}`;
+
+    const response: ApiResponse<{ downloadUrl: string; fileName: string }> = {
+      success: true,
+      data: {
+        downloadUrl,
+        fileName,
+      },
+      message: '模板生成成功',
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/import/history', requireAuth, requirePermission('user:import'),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+
+    const history = db
+      .prepare(
+        `SELECT * FROM import_history WHERE module = 'users' ORDER BY created_at DESC LIMIT 50`
+      )
+      .all() as unknown as ImportHistory[];
+
+    const response: ApiResponse<ImportHistory[]> = {
+      success: true,
+      data: history,
+      total: history.length,
     };
 
     res.json(response);

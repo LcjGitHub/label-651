@@ -12,6 +12,8 @@ import {
   LoginResponse,
   OperationLog,
   OperationLogQuery,
+  ImportResult,
+  ImportHistory,
 } from '@/types';
 
 const API_BASE_URL = '/api';
@@ -139,6 +141,62 @@ export const userApi = {
       method: 'PUT',
       body: JSON.stringify({ role_ids: roleIds }),
     });
+  },
+
+  importUsers: async (file: File, onProgress?: (percent: number) => void): Promise<ApiResponse<ImportResult>> => {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_BASE_URL}/users/import`);
+
+      const userId = getCurrentUserId();
+      if (userId) {
+        xhr.setRequestHeader('x-user-id', String(userId));
+      }
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      };
+
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(data);
+          } else {
+            reject(new Error(data.message || '导入失败'));
+          }
+        } catch {
+          reject(new Error('响应数据解析失败'));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new Error('网络请求失败'));
+      };
+
+      xhr.send(formData);
+    });
+  },
+
+  exportUsers: async (params?: { search?: string; ids?: number[] }): Promise<ApiResponse<{ downloadUrl: string; fileName: string; count: number }>> => {
+    return handleRequest<ApiResponse<{ downloadUrl: string; fileName: string; count: number }>>(`${API_BASE_URL}/users/export`, {
+      method: 'POST',
+      body: JSON.stringify(params || {}),
+    });
+  },
+
+  getExportTemplate: async (): Promise<ApiResponse<{ downloadUrl: string; fileName: string }>> => {
+    return handleRequest<ApiResponse<{ downloadUrl: string; fileName: string }>>(`${API_BASE_URL}/users/export/template`);
+  },
+
+  getImportHistory: async (): Promise<ApiResponse<ImportHistory[]>> => {
+    return handleRequest<ApiResponse<ImportHistory[]>>(`${API_BASE_URL}/users/import/history`);
   },
 };
 

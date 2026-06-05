@@ -8,6 +8,7 @@ import operationLogsRouter from './routes/operationLogs';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { globalOperationLogMiddleware } from './middleware/globalOperationLog';
 import { initDatabase } from './database';
+import { exportsDir } from './middleware/upload';
 
 const app = express();
 const PORT = process.env.PORT || 8089;
@@ -27,6 +28,8 @@ app.use(
 );
 
 app.use(express.json({ limit: '10mb' }));
+
+app.use('/api/exports', express.static(exportsDir));
 
 app.use(globalOperationLogMiddleware());
 

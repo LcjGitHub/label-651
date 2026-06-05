@@ -136,6 +136,29 @@ export interface OperationLogQuery {
   page_size?: number;
 }
 
+export interface ImportHistory {
+  id: number;
+  operator_id: number;
+  operator_name: string;
+  module: string;
+  file_name: string;
+  file_size: number;
+  total_count: number;
+  success_count: number;
+  fail_count: number;
+  fail_reasons: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  ip_address: string;
+  created_at: string;
+}
+
+export interface ImportResult {
+  total: number;
+  success: number;
+  fail: number;
+  failReasons: { row: number; reason: string }[];
+}
+
 export interface Toast {
   id: number;
   type: 'success' | 'error' | 'info';

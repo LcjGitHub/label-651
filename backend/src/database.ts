@@ -110,6 +110,27 @@ export const initDatabase = (): DatabaseSync => {
     CREATE INDEX IF NOT EXISTS idx_operation_logs_type ON operation_logs(operation_type);
     CREATE INDEX IF NOT EXISTS idx_operation_logs_module ON operation_logs(module);
     CREATE INDEX IF NOT EXISTS idx_operation_logs_created ON operation_logs(created_at);
+
+    CREATE TABLE IF NOT EXISTS import_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      operator_id INTEGER NOT NULL,
+      operator_name VARCHAR(100) NOT NULL,
+      module VARCHAR(50) NOT NULL DEFAULT 'users',
+      file_name VARCHAR(255) NOT NULL,
+      file_size INTEGER NOT NULL DEFAULT 0,
+      total_count INTEGER NOT NULL DEFAULT 0,
+      success_count INTEGER NOT NULL DEFAULT 0,
+      fail_count INTEGER NOT NULL DEFAULT 0,
+      fail_reasons TEXT,
+      status VARCHAR(20) NOT NULL DEFAULT 'completed',
+      ip_address VARCHAR(50),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_import_history_operator ON import_history(operator_id);
+    CREATE INDEX IF NOT EXISTS idx_import_history_module ON import_history(module);
+    CREATE INDEX IF NOT EXISTS idx_import_history_status ON import_history(status);
+    CREATE INDEX IF NOT EXISTS idx_import_history_created ON import_history(created_at);
   `);
 
   const count = db.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number };
@@ -178,17 +199,19 @@ export const initDatabase = (): DatabaseSync => {
       ['用户新增', 'user:create', 'action', 1, '', '', '', 2, '新增用户'],
       ['用户编辑', 'user:update', 'action', 1, '', '', '', 3, '编辑用户'],
       ['用户删除', 'user:delete', 'action', 1, '', '', '', 4, '删除用户'],
+      ['用户导入', 'user:import', 'action', 1, '', '', '', 5, '批量导入用户'],
+      ['用户导出', 'user:export', 'action', 1, '', '', '', 6, '批量导出用户'],
 
       ['角色管理', 'role:view', 'menu', 0, '/roles', 'Roles', 'Shield', 2, '角色管理菜单'],
-      ['角色列表', 'role:list', 'action', 6, '', '', '', 1, '查看角色列表'],
-      ['角色新增', 'role:create', 'action', 6, '', '', '', 2, '新增角色'],
-      ['角色编辑', 'role:update', 'action', 6, '', '', '', 3, '编辑角色'],
-      ['角色删除', 'role:delete', 'action', 6, '', '', '', 4, '删除角色'],
-      ['角色分配权限', 'role:assign', 'action', 6, '', '', '', 5, '为角色分配权限'],
+      ['角色列表', 'role:list', 'action', 8, '', '', '', 1, '查看角色列表'],
+      ['角色新增', 'role:create', 'action', 8, '', '', '', 2, '新增角色'],
+      ['角色编辑', 'role:update', 'action', 8, '', '', '', 3, '编辑角色'],
+      ['角色删除', 'role:delete', 'action', 8, '', '', '', 4, '删除角色'],
+      ['角色分配权限', 'role:assign', 'action', 8, '', '', '', 5, '为角色分配权限'],
 
       ['系统设置', 'system:view', 'menu', 0, '/system', 'System', 'Settings', 3, '系统设置菜单'],
-      ['系统日志', 'system:log', 'action', 12, '', '', '', 1, '查看系统日志'],
-      ['系统配置', 'system:config', 'action', 12, '', '', '', 2, '修改系统配置'],
+      ['系统日志', 'system:log', 'action', 14, '', '', '', 1, '查看系统日志'],
+      ['系统配置', 'system:config', 'action', 14, '', '', '', 2, '修改系统配置'],
     ];
 
     db.exec('BEGIN TRANSACTION');
@@ -201,18 +224,18 @@ export const initDatabase = (): DatabaseSync => {
         INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)
       `);
 
-      for (let i = 1; i <= 14; i++) {
+      for (let i = 1; i <= 16; i++) {
         assignRolePerm.run(1, i);
       }
 
-      for (let i = 1; i <= 11; i++) {
+      for (let i = 1; i <= 13; i++) {
         assignRolePerm.run(2, i);
       }
 
       assignRolePerm.run(3, 1);
       assignRolePerm.run(3, 2);
-      assignRolePerm.run(3, 6);
-      assignRolePerm.run(3, 7);
+      assignRolePerm.run(3, 8);
+      assignRolePerm.run(3, 9);
 
       assignRolePerm.run(4, 1);
       assignRolePerm.run(4, 2);
@@ -322,9 +345,105 @@ export const initDatabase = (): DatabaseSync => {
     }
   };
 
+  const migrateImportExportPermissions = () => {
+    const database = db!;
+    const userViewPerm = database
+      .prepare('SELECT id FROM permissions WHERE code = ?')
+      .get('user:view') as { id: number } | undefined;
+
+    const parentId = userViewPerm?.id || 0;
+
+    const importPerm = database
+      .prepare('SELECT id FROM permissions WHERE code = ?')
+      .get('user:import') as { id: number } | undefined;
+
+    let importPermId: number;
+    if (!importPerm) {
+      const result = database
+        .prepare(
+          `INSERT INTO permissions (name, code, type, parent_id, path, component, icon, sort_order, description)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          '用户导入',
+          'user:import',
+          'action',
+          parentId,
+          '',
+          '',
+          '',
+          5,
+          '批量导入用户'
+        );
+      importPermId = result.lastInsertRowid as number;
+      console.log('迁移：补充「用户导入」权限成功');
+    } else {
+      importPermId = importPerm.id;
+    }
+
+    const exportPerm = database
+      .prepare('SELECT id FROM permissions WHERE code = ?')
+      .get('user:export') as { id: number } | undefined;
+
+    let exportPermId: number;
+    if (!exportPerm) {
+      const result = database
+        .prepare(
+          `INSERT INTO permissions (name, code, type, parent_id, path, component, icon, sort_order, description)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          '用户导出',
+          'user:export',
+          'action',
+          parentId,
+          '',
+          '',
+          '',
+          6,
+          '批量导出用户'
+        );
+      exportPermId = result.lastInsertRowid as number;
+      console.log('迁移：补充「用户导出」权限成功');
+    } else {
+      exportPermId = exportPerm.id;
+    }
+
+    const superAdminRole = database
+      .prepare('SELECT id FROM roles WHERE code = ?')
+      .get('super_admin') as { id: number } | undefined;
+
+    const adminRole = database
+      .prepare('SELECT id FROM roles WHERE code = ?')
+      .get('admin') as { id: number } | undefined;
+
+    const assignPerm = (roleId: number, permId: number, permName: string) => {
+      const existing = database
+        .prepare('SELECT 1 FROM role_permissions WHERE role_id = ? AND permission_id = ?')
+        .get(roleId, permId);
+      if (!existing) {
+        database
+          .prepare('INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)')
+          .run(roleId, permId);
+        const role = database.prepare('SELECT name FROM roles WHERE id = ?').get(roleId) as { name: string } | undefined;
+        console.log(`迁移：为「${role?.name || roleId}」分配「${permName}」权限成功`);
+      }
+    };
+
+    if (superAdminRole) {
+      assignPerm(superAdminRole.id, importPermId, '用户导入');
+      assignPerm(superAdminRole.id, exportPermId, '用户导出');
+    }
+    if (adminRole) {
+      assignPerm(adminRole.id, importPermId, '用户导入');
+      assignPerm(adminRole.id, exportPermId, '用户导出');
+    }
+  };
+
   try {
     db!.exec('BEGIN TRANSACTION');
     migrateSystemLogPermission();
+    migrateImportExportPermissions();
     db!.exec('COMMIT');
   } catch (err) {
     db!.exec('ROLLBACK');

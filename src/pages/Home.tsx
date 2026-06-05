@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Users, Loader2, Shield, UserCog, LogOut, FileText } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, Loader2, Shield, UserCog, LogOut, FileText, Upload } from 'lucide-react';
 import { User, UserCreate, UserUpdate, Toast as ToastType } from '@/types';
 import { userApi } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
 import UserForm from '@/components/UserForm';
 import ConfirmModal from '@/components/ConfirmModal';
 import Toast from '@/components/Toast';
+import ImportModal from '@/components/ImportModal';
+import ExportDropdown from '@/components/ExportDropdown';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 
@@ -26,6 +28,11 @@ export default function Home() {
   const canCreateUser = hasPermission('user:create');
   const canUpdateUser = hasPermission('user:update');
   const canDeleteUser = hasPermission('user:delete');
+  const canImportUser = hasPermission('user:import');
+  const canExportUser = hasPermission('user:export');
+
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -46,6 +53,7 @@ export default function Home() {
       if (response.success && response.data) {
         setUsers(response.data);
         setTotal(response.total || response.data.length);
+        setSelectedIds([]);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '加载用户列表失败';
@@ -54,6 +62,25 @@ export default function Home() {
       setLoading(false);
     }
   }, []);
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(users.map((u) => u.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleSelectOne = (userId: number, checked: boolean) => {
+    if (checked) {
+      setSelectedIds((prev) => [...prev, userId]);
+    } else {
+      setSelectedIds((prev) => prev.filter((id) => id !== userId));
+    }
+  };
+
+  const isAllSelected = users.length > 0 && selectedIds.length === users.length;
+  const isIndeterminate = selectedIds.length > 0 && selectedIds.length < users.length;
 
   useEffect(() => {
     fetchUsers();
@@ -234,19 +261,44 @@ export default function Home() {
               <h2 className="text-xl font-bold text-gray-900">用户列表</h2>
               <p className="text-sm text-gray-500 mt-0.5">
                 共 {total} 位用户
+                {selectedIds.length > 0 && (
+                  <span className="ml-2 text-blue-600">（已选 {selectedIds.length} 位）</span>
+                )}
               </p>
             </div>
-            {canCreateUser && (
-              <button
-                onClick={handleAddClick}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white
-                           rounded-lg font-medium text-sm hover:bg-blue-700 hover:shadow-lg
-                           transition-all duration-200 hover:-translate-y-0.5"
-              >
-                <Plus size={18} />
-                新增用户
-              </button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {canImportUser && (
+                <button
+                  onClick={() => setImportModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700
+                             rounded-lg font-medium text-sm hover:bg-gray-50 hover:border-gray-400
+                             transition-all duration-200 shadow-sm"
+                >
+                  <Upload size={18} />
+                  导入
+                </button>
+              )}
+              {canExportUser && (
+                <ExportDropdown
+                  selectedIds={selectedIds}
+                  searchQuery={searchQuery}
+                  totalCount={total}
+                  showToast={showToast}
+                  onExport={() => {}}
+                />
+              )}
+              {canCreateUser && (
+                <button
+                  onClick={handleAddClick}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white
+                             rounded-lg font-medium text-sm hover:bg-blue-700 hover:shadow-lg
+                             transition-all duration-200 hover:-translate-y-0.5"
+                >
+                  <Plus size={18} />
+                  新增用户
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -287,6 +339,18 @@ export default function Home() {
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-6 py-4 text-left w-12">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = isIndeterminate;
+                        }}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600
+                                   focus:ring-blue-500 cursor-pointer"
+                      />
+                    </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       编号
                     </th>
@@ -319,8 +383,17 @@ export default function Home() {
                       key={user.id}
                       className={`hover:bg-blue-50/50 transition-colors duration-150 ${
                         index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
-                      }`}
+                      } ${selectedIds.includes(user.id) ? 'bg-blue-50/80' : ''}`}
                     >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(user.id)}
+                          onChange={(e) => handleSelectOne(user.id, e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600
+                                     focus:ring-blue-500 cursor-pointer"
+                        />
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {user.id}
                       </td>
@@ -439,6 +512,13 @@ export default function Home() {
           confirmText="删除"
           type="danger"
           isLoading={deleteLoading}
+        />
+
+        <ImportModal
+          isOpen={importModalOpen}
+          onClose={() => setImportModalOpen(false)}
+          onSuccess={() => fetchUsers(searchQuery)}
+          showToast={showToast}
         />
       </div>
     </div>
