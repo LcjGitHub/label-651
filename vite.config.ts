@@ -14,6 +14,11 @@ export default defineConfig({
         target: 'http://localhost:8089',
         changeOrigin: true,
       },
+      '/ws': {
+        target: 'ws://localhost:8089',
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
   plugins: [

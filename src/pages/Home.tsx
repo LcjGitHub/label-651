@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Users, Loader2, Shield, UserCog, LogOut, FileText, Upload, History } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, Loader2, Shield, UserCog, LogOut, FileText, Upload, History, Bell } from 'lucide-react';
 import { User, UserCreate, UserUpdate, Toast as ToastType } from '@/types';
 import { userApi } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
@@ -9,12 +9,17 @@ import Toast from '@/components/Toast';
 import ImportModal from '@/components/ImportModal';
 import ImportHistoryModal from '@/components/ImportHistoryModal';
 import ExportDropdown from '@/components/ExportDropdown';
+import MessageDropdown from '@/components/MessageDropdown';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
+import { useMessageStore } from '@/store/messageStore';
 
 export default function Home() {
   const { user, hasPermission, logout } = useAuthStore();
   const navigate = useNavigate();
+  const connectWebSocket = useMessageStore((state) => state.connectWebSocket);
+  const disconnectWebSocket = useMessageStore((state) => state.disconnectWebSocket);
+  const fetchUnreadCount = useMessageStore((state) => state.fetchUnreadCount);
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [filteredTotal, setFilteredTotal] = useState(0);
@@ -90,6 +95,14 @@ export default function Home() {
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  useEffect(() => {
+    connectWebSocket();
+    fetchUnreadCount();
+    return () => {
+      disconnectWebSocket();
+    };
+  }, [connectWebSocket, disconnectWebSocket, fetchUnreadCount]);
 
   useEffect(() => {
     const state = location.state as { message?: string } | null;
@@ -205,6 +218,7 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              <MessageDropdown showToast={showToast} />
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">{user?.name}</p>
                 <p className="text-xs text-gray-500">{user?.email}</p>
@@ -257,6 +271,17 @@ export default function Home() {
                 操作日志
               </Link>
             )}
+            <Link
+              to="/messages"
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+                location.pathname === '/messages'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Bell size={16} />
+              消息中心
+            </Link>
           </div>
         </div>
 

@@ -166,6 +166,37 @@ export interface ImportResult {
   failReasons: { row: number; reason: string }[];
 }
 
+export type MessageType = 'system' | 'task' | 'other';
+
+export interface Message {
+  id: number;
+  title: string;
+  content: string;
+  receiver_id: number;
+  sender_id: number | null;
+  sender_name?: string;
+  receiver_name?: string;
+  type: MessageType;
+  is_read: 0 | 1;
+  created_at: string;
+}
+
+export interface MessageCreate {
+  title: string;
+  content: string;
+  receiver_ids?: number[];
+  send_to_all?: boolean;
+  sender_id?: number;
+  type: MessageType;
+}
+
+export interface MessageQuery {
+  type?: MessageType;
+  is_read?: 0 | 1;
+  page?: number;
+  page_size?: number;
+}
+
 export interface ExportQuery {
   search?: string;
   ids?: number[];

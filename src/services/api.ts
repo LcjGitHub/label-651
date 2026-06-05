@@ -14,6 +14,9 @@ import {
   OperationLogQuery,
   ImportResult,
   ImportHistory,
+  Message,
+  MessageCreate,
+  MessageQuery,
 } from '@/types';
 
 const API_BASE_URL = '/api';
@@ -362,6 +365,73 @@ export const operationLogApi = {
   getOperators: async (): Promise<ApiResponse<{ id: number; name: string }[]>> => {
     return handleRequest<ApiResponse<{ id: number; name: string }[]>>(
       `${API_BASE_URL}/operation-logs/operators`
+    );
+  },
+};
+
+export const messageApi = {
+  getMessages: async (
+    params?: MessageQuery
+  ): Promise<ApiResponse<Message[]> & { unread_count?: number }> => {
+    let url = `${API_BASE_URL}/messages`;
+    if (params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          searchParams.append(key, String(value));
+        }
+      });
+      const queryString = searchParams.toString();
+      if (queryString) url += `?${queryString}`;
+    }
+    return handleRequest<ApiResponse<Message[]> & { unread_count?: number }>(url);
+  },
+
+  getMessage: async (id: number): Promise<ApiResponse<Message> & { unread_count?: number }> => {
+    return handleRequest<ApiResponse<Message> & { unread_count?: number }>(
+      `${API_BASE_URL}/messages/${id}`
+    );
+  },
+
+  getUnreadCount: async (): Promise<ApiResponse<{ unread_count: number }>> => {
+    return handleRequest<ApiResponse<{ unread_count: number }>>(
+      `${API_BASE_URL}/messages/unread-count`
+    );
+  },
+
+  createMessage: async (
+    data: MessageCreate
+  ): Promise<ApiResponse<Message[]>> => {
+    return handleRequest<ApiResponse<Message[]>>(`${API_BASE_URL}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  markAsRead: async (id: number): Promise<ApiResponse & { unread_count?: number }> => {
+    return handleRequest<ApiResponse & { unread_count?: number }>(
+      `${API_BASE_URL}/messages/${id}/read`,
+      {
+        method: 'PUT',
+      }
+    );
+  },
+
+  markAllAsRead: async (): Promise<ApiResponse & { unread_count?: number }> => {
+    return handleRequest<ApiResponse & { unread_count?: number }>(
+      `${API_BASE_URL}/messages/read-all`,
+      {
+        method: 'PUT',
+      }
+    );
+  },
+
+  deleteMessage: async (id: number): Promise<ApiResponse & { unread_count?: number }> => {
+    return handleRequest<ApiResponse & { unread_count?: number }>(
+      `${API_BASE_URL}/messages/${id}`,
+      {
+        method: 'DELETE',
+      }
     );
   },
 };

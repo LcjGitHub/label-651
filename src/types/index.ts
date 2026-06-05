@@ -165,3 +165,45 @@ export interface Toast {
   type: 'success' | 'error' | 'info';
   message: string;
 }
+
+export type MessageType = 'system' | 'task' | 'other';
+
+export interface Message {
+  id: number;
+  title: string;
+  content: string;
+  receiver_id: number;
+  sender_id: number | null;
+  sender_name?: string;
+  receiver_name?: string;
+  type: MessageType;
+  is_read: 0 | 1;
+  created_at: string;
+}
+
+export interface MessageCreate {
+  title: string;
+  content: string;
+  receiver_ids?: number[];
+  send_to_all?: boolean;
+  type: MessageType;
+}
+
+export interface MessageQuery {
+  type?: MessageType;
+  is_read?: 0 | 1;
+  page?: number;
+  page_size?: number;
+}
+
+export interface MessageListResponse {
+  messages: Message[];
+  total: number;
+  unread_count: number;
+}
+
+export interface WSNewMessageEvent {
+  type: 'new_message' | 'unread_count_update' | 'connected';
+  data: unknown;
+  timestamp: string;
+}

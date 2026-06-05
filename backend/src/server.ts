@@ -1,17 +1,21 @@
 import express from 'express';
 import cors from 'cors';
+import { createServer } from 'http';
 import usersRouter from './routes/users';
 import rolesRouter from './routes/roles';
 import permissionsRouter from './routes/permissions';
 import authRouter from './routes/auth';
 import operationLogsRouter from './routes/operationLogs';
+import messagesRouter from './routes/messages';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { globalOperationLogMiddleware } from './middleware/globalOperationLog';
 import { initDatabase } from './database';
 import { exportsDir } from './middleware/upload';
+import { initWebSocket } from './services/wsService';
 
 const app = express();
 const PORT = process.env.PORT || 8089;
+const server = createServer(app);
 
 app.use(
   cors({
@@ -46,6 +50,7 @@ app.use('/api/users', usersRouter);
 app.use('/api/roles', rolesRouter);
 app.use('/api/permissions', permissionsRouter);
 app.use('/api/operation-logs', operationLogsRouter);
+app.use('/api/messages', messagesRouter);
 
 app.use(notFound);
 app.use(errorHandler);
@@ -53,12 +58,15 @@ app.use(errorHandler);
 const startServer = () => {
   try {
     initDatabase();
-    app.listen(PORT, () => {
+    initWebSocket(server);
+    server.listen(PORT, () => {
       console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
       console.log(`📚 API 文档: GET /api/health`);
       console.log(`👥 用户接口: GET /api/users`);
       console.log(`🎭 角色接口: GET /api/roles`);
       console.log(`🔐 权限接口: GET /api/permissions`);
+      console.log(`💬 消息接口: GET /api/messages`);
+      console.log(`🔌 WebSocket: ws://localhost:${PORT}/ws`);
     });
   } catch (err) {
     console.error('启动服务器失败:', err);

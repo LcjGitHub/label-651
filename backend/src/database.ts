@@ -131,6 +131,25 @@ export const initDatabase = (): DatabaseSync => {
     CREATE INDEX IF NOT EXISTS idx_import_history_module ON import_history(module);
     CREATE INDEX IF NOT EXISTS idx_import_history_status ON import_history(status);
     CREATE INDEX IF NOT EXISTS idx_import_history_created ON import_history(created_at);
+
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title VARCHAR(255) NOT NULL,
+      content TEXT NOT NULL,
+      receiver_id INTEGER NOT NULL,
+      sender_id INTEGER,
+      type VARCHAR(20) NOT NULL DEFAULT 'other' CHECK(type IN ('system', 'task', 'other')),
+      is_read INTEGER NOT NULL DEFAULT 0 CHECK(is_read IN (0, 1)),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(type);
+    CREATE INDEX IF NOT EXISTS idx_messages_is_read ON messages(is_read);
+    CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
   `);
 
   const count = db.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number };
