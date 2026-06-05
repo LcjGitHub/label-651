@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Users, Loader2, Shield, UserCog, LogOut, FileText, Upload, History, Bell } from 'lucide-react';
+import { Plus, Edit2, Trash2, Loader2, Shield, FileText, Upload, History, Users } from 'lucide-react';
 import { User, UserCreate, UserUpdate, Toast as ToastType } from '@/types';
 import { userApi } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
@@ -9,17 +9,13 @@ import Toast from '@/components/Toast';
 import ImportModal from '@/components/ImportModal';
 import ImportHistoryModal from '@/components/ImportHistoryModal';
 import ExportDropdown from '@/components/ExportDropdown';
-import MessageDropdown from '@/components/MessageDropdown';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import AppHeader from '@/components/AppHeader';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
-import { useMessageStore } from '@/store/messageStore';
 
 export default function Home() {
-  const { user, hasPermission, logout } = useAuthStore();
+  const { hasPermission, logout } = useAuthStore();
   const navigate = useNavigate();
-  const connectWebSocket = useMessageStore((state) => state.connectWebSocket);
-  const disconnectWebSocket = useMessageStore((state) => state.disconnectWebSocket);
-  const fetchUnreadCount = useMessageStore((state) => state.fetchUnreadCount);
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [filteredTotal, setFilteredTotal] = useState(0);
@@ -30,8 +26,6 @@ export default function Home() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formLoading, setFormLoading] = useState(false);
 
-  const canViewRoleList = hasPermission('role:list');
-  const canViewOperationLogs = hasPermission('system:log');
   const canCreateUser = hasPermission('user:create');
   const canUpdateUser = hasPermission('user:update');
   const canDeleteUser = hasPermission('user:delete');
@@ -41,11 +35,6 @@ export default function Home() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importHistoryModalOpen, setImportHistoryModalOpen] = useState(false);
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
@@ -95,14 +84,6 @@ export default function Home() {
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
-
-  useEffect(() => {
-    connectWebSocket();
-    fetchUnreadCount();
-    return () => {
-      disconnectWebSocket();
-    };
-  }, [connectWebSocket, disconnectWebSocket, fetchUnreadCount]);
 
   useEffect(() => {
     const state = location.state as { message?: string } | null;
@@ -204,86 +185,7 @@ export default function Home() {
       <Toast toasts={toasts} onRemove={removeToast} />
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
-                <UserCog className="text-white" size={28} />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">用户管理系统</h1>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  管理用户、角色和权限
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <MessageDropdown showToast={showToast} />
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-                <p className="text-xs text-gray-500">{user?.email}</p>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-150"
-                title="退出登录"
-              >
-                <LogOut size={18} />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex gap-1 bg-white p-1 rounded-xl shadow-lg w-fit">
-            <Link
-              to="/"
-              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                location.pathname === '/'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Users size={16} />
-              用户管理
-            </Link>
-            {canViewRoleList && (
-              <Link
-                to="/roles"
-                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                  location.pathname === '/roles'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <Shield size={16} />
-                角色管理
-              </Link>
-            )}
-            {canViewOperationLogs && (
-              <Link
-                to="/operation-logs"
-                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                  location.pathname === '/operation-logs'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <FileText size={16} />
-                操作日志
-              </Link>
-            )}
-            <Link
-              to="/messages"
-              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                location.pathname === '/messages'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Bell size={16} />
-              消息中心
-            </Link>
-          </div>
-        </div>
+        <AppHeader showToast={showToast} />
 
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

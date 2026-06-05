@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bell, CheckCheck, ChevronRight, Loader2, Trash2, Eye } from 'lucide-react';
-import { Message, MessageType } from '@/types';
+import { Message, MessageType, Toast as ToastType } from '@/types';
 import { useMessageStore } from '@/store/messageStore';
 import { useNavigate } from 'react-router-dom';
 import MessageDetailModal from './MessageDetailModal';
 
 interface MessageDropdownProps {
-  showToast: (type: 'success' | 'error' | 'info', message: string) => void;
+  showToast: (type: ToastType['type'], message: string) => void;
 }
 
 const typeMap: Record<MessageType, { label: string; color: string; bg: string; dot: string }> = {
@@ -19,6 +19,7 @@ export default function MessageDropdown({ showToast }: MessageDropdownProps) {
   const navigate = useNavigate();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -30,6 +31,7 @@ export default function MessageDropdown({ showToast }: MessageDropdownProps) {
   const markAsRead = useMessageStore((state) => state.markAsRead);
   const markAllAsRead = useMessageStore((state) => state.markAllAsRead);
   const deleteMessage = useMessageStore((state) => state.deleteMessage);
+  const setUnreadCount = useMessageStore((state) => state.setUnreadCount);
 
   const loadMessages = async () => {
     try {
@@ -41,12 +43,21 @@ export default function MessageDropdown({ showToast }: MessageDropdownProps) {
       showToast('error', message);
     } finally {
       setLoading(false);
+      setHasLoaded(true);
     }
   };
 
   useEffect(() => {
+    if (isOpen && !hasLoaded) {
+      loadMessages();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
     if (isOpen) {
       loadMessages();
+    } else {
+      setHasLoaded(false);
     }
   }, [isOpen]);
 
@@ -77,6 +88,7 @@ export default function MessageDropdown({ showToast }: MessageDropdownProps) {
   };
 
   const handleViewDetail = async (message: Message) => {
+    setIsOpen(false);
     setSelectedMessage(message);
     setDetailModalOpen(true);
     if (message.is_read === 0) {
@@ -111,12 +123,16 @@ export default function MessageDropdown({ showToast }: MessageDropdownProps) {
 
   const handleMarkAllAsRead = async () => {
     try {
-      await markAllAsRead();
+      setActionLoading(-1);
+      const response = await markAllAsRead();
       setMessages((prev) => prev.map((m) => ({ ...m, is_read: 1 })));
+      setUnreadCount(0);
       showToast('success', '全部已标记为已读');
     } catch (err) {
       const msg = err instanceof Error ? err.message : '操作失败';
       showToast('error', msg);
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -141,6 +157,7 @@ export default function MessageDropdown({ showToast }: MessageDropdownProps) {
   };
 
   const displayUnread = unreadCount > 99 ? '99+' : unreadCount;
+  const isMarkAllLoading = actionLoading === -1;
 
   return (
     <>
@@ -159,7 +176,7 @@ export default function MessageDropdown({ showToast }: MessageDropdownProps) {
         </button>
 
         {isOpen && (
-          <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
+          <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-2xl shadow-2xl border border-gray-100 z-40 overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-slate-50">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
                 <Bell size={16} className="text-blue-600" />
@@ -173,16 +190,21 @@ export default function MessageDropdown({ showToast }: MessageDropdownProps) {
               {unreadCount > 0 && (
                 <button
                   onClick={handleMarkAllAsRead}
-                  className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 px-2 py-1 hover:bg-blue-100 rounded-md transition-colors"
+                  disabled={isMarkAllLoading}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 px-2 py-1 hover:bg-blue-100 rounded-md transition-colors disabled:opacity-50"
                 >
-                  <CheckCheck size={12} />
+                  {isMarkAllLoading ? (
+                    <Loader2 className="animate-spin" size={12} />
+                  ) : (
+                    <CheckCheck size={12} />
+                  )}
                   全部已读
                 </button>
               )}
             </div>
 
             <div className="max-h-[400px] overflow-y-auto">
-              {loading ? (
+              {loading || !hasLoaded ? (
                 <div className="p-8 flex flex-col items-center justify-center">
                   <Loader2 className="animate-spin text-blue-600" size={24} />
                   <p className="mt-3 text-sm text-gray-500">加载消息中...</p>

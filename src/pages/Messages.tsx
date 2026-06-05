@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, CheckCheck, Eye, Loader2, Trash2, Users, Shield, FileText, Inbox } from 'lucide-react';
+import { Bell, CheckCheck, Eye, Loader2, Trash2, Inbox, FileText as _FileText } from 'lucide-react';
 import { Message, MessageType, Toast as ToastType } from '@/types';
 import { useMessageStore } from '@/store/messageStore';
-import { Link, useLocation } from 'react-router-dom';
-import { useAuthStore } from '@/store/authStore';
 import MessageDetailModal from '@/components/MessageDetailModal';
+import AppHeader from '@/components/AppHeader';
+import Toast from '@/components/Toast';
 
 interface FilterTab {
   key: MessageType | 'all';
@@ -21,24 +21,20 @@ const typeMap: Record<MessageType, { label: string; color: string; bg: string; d
 const filterTabs: FilterTab[] = [
   { key: 'all', label: '全部', icon: <Inbox size={16} /> },
   { key: 'system', label: '系统通知', icon: <Bell size={16} /> },
-  { key: 'task', label: '任务提醒', icon: <FileText size={16} /> },
-  { key: 'other', label: '其他', icon: <Users size={16} /> },
+  { key: 'task', label: '任务提醒', icon: <Eye size={16} /> },
+  { key: 'other', label: '其他', icon: <Eye size={16} /> },
 ];
 
 export default function Messages() {
-  const { user, logout, hasPermission } = useAuthStore();
-  const location = useLocation();
-  const canViewRoleList = hasPermission('role:list');
-  const canViewOperationLogs = hasPermission('system:log');
-
   const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [total, setTotal] = useState(0);
+  const [total, setTotal] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<MessageType | 'all'>('all');
   const [readFilter, setReadFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
+  const [markAllLoading, setMarkAllLoading] = useState(false);
   const [toasts, setToasts] = useState<ToastType[]>([]);
 
   const unreadCount = useMessageStore((state) => state.unreadCount);
@@ -46,10 +42,14 @@ export default function Messages() {
   const markAsRead = useMessageStore((state) => state.markAsRead);
   const markAllAsRead = useMessageStore((state) => state.markAllAsRead);
   const deleteMessage = useMessageStore((state) => state.deleteMessage);
+  const setUnreadCount = useMessageStore((state) => state.setUnreadCount);
 
   const showToast = (type: ToastType['type'], message: string) => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3000);
   };
 
   const removeToast = (id: number) => {
@@ -73,6 +73,7 @@ export default function Messages() {
     } catch (err) {
       const message = err instanceof Error ? err.message : '加载消息失败';
       showToast('error', message);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -126,12 +127,16 @@ export default function Messages() {
 
   const handleMarkAllAsRead = async () => {
     try {
+      setMarkAllLoading(true);
       await markAllAsRead();
       setMessages((prev) => prev.map((m) => ({ ...m, is_read: 1 })));
+      setUnreadCount(0);
       showToast('success', '全部已标记为已读');
     } catch (err) {
       const msg = err instanceof Error ? err.message : '操作失败';
       showToast('error', msg);
+    } finally {
+      setMarkAllLoading(false);
     }
   };
 
@@ -141,7 +146,7 @@ export default function Messages() {
       setActionLoadingId(message.id);
       await deleteMessage(message.id);
       setMessages((prev) => prev.filter((m) => m.id !== message.id));
-      setTotal((prev) => Math.max(0, prev - 1));
+      setTotal((prev) => (typeof prev === 'number' ? Math.max(0, prev - 1) : prev));
       showToast('success', '删除成功');
     } catch (err) {
       const msg = err instanceof Error ? err.message : '操作失败';
@@ -155,33 +160,20 @@ export default function Messages() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {toasts.map((t) => (
-        <div key={t.id} className="fixed top-4 right-4 z-50">
-          <div
-            className={`px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-fade-in ${
-              t.type === 'success'
-                ? 'bg-green-500 text-white'
-                : t.type === 'error'
-                ? 'bg-red-500 text-white'
-                : 'bg-blue-500 text-white'
-            }`}
-            onClick={() => removeToast(t.id)}
-          >
-            {t.message}
-          </div>
-        </div>
-      ))}
+      <Toast toasts={toasts} onRemove={removeToast} />
 
       <div className="max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <AppHeader showToast={showToast} />
+
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
-                <Bell className="text-white" size={28} />
+              <div className="p-2.5 bg-blue-100 rounded-xl">
+                <Bell className="text-blue-600" size={24} />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">消息中心</h1>
-                <p className="text-sm text-gray-500 mt-0.5">
+                <h2 className="text-xl font-bold text-gray-900">消息中心</h2>
+                <p className="text-sm text-gray-500">
                   查看和管理您的所有站内消息
                   {unreadCount > 0 && (
                     <span className="ml-2 text-red-500 font-medium">
@@ -191,70 +183,24 @@ export default function Messages() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {unreadCount > 0 && (
                 <button
                   onClick={handleMarkAllAsRead}
+                  disabled={markAllLoading}
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700
                              rounded-lg font-medium text-sm hover:bg-gray-50 hover:border-gray-400
-                             transition-all duration-200 shadow-sm"
+                             transition-all duration-200 shadow-sm disabled:opacity-60"
                 >
-                  <CheckCheck size={16} />
+                  {markAllLoading ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    <CheckCheck size={16} />
+                  )}
                   全部已读
                 </button>
               )}
             </div>
-          </div>
-
-          <div className="flex gap-1 bg-white p-1 rounded-xl shadow-lg w-fit">
-            <Link
-              to="/"
-              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                location.pathname === '/'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Users size={16} />
-              用户管理
-            </Link>
-            {canViewRoleList && (
-              <Link
-                to="/roles"
-                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                  location.pathname === '/roles'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <Shield size={16} />
-                角色管理
-              </Link>
-            )}
-            {canViewOperationLogs && (
-              <Link
-                to="/operation-logs"
-                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                  location.pathname === '/operation-logs'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <FileText size={16} />
-                操作日志
-              </Link>
-            )}
-            <Link
-              to="/messages"
-              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                location.pathname === '/messages'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Bell size={16} />
-              消息中心
-            </Link>
           </div>
         </div>
 
@@ -297,11 +243,22 @@ export default function Messages() {
 
           <div className="px-6 py-3 bg-gray-50/70 border-b border-gray-100 flex items-center justify-between">
             <p className="text-sm text-gray-600">
-              共 <span className="font-semibold text-gray-900">{total}</span> 条消息
-              {unreadInCurrent > 0 && (
-                <span className="ml-2 text-red-500">
-                  ({unreadInCurrent} 条未读)
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="animate-spin" size={14} />
+                  加载中...
                 </span>
+              ) : total !== null ? (
+                <>
+                  共 <span className="font-semibold text-gray-900">{total}</span> 条消息
+                  {unreadInCurrent > 0 && (
+                    <span className="ml-2 text-red-500">
+                      ({unreadInCurrent} 条未读)
+                    </span>
+                  )}
+                </>
+              ) : (
+                '加载中...'
               )}
             </p>
           </div>
@@ -309,7 +266,7 @@ export default function Messages() {
           {loading ? (
             <div className="p-16 flex flex-col items-center justify-center">
               <Loader2 className="animate-spin text-blue-600" size={40} />
-              <p className="mt-4 text-gray-500">加载中...</p>
+              <p className="mt-4 text-gray-500">加载消息中...</p>
             </div>
           ) : messages.length === 0 ? (
             <div className="p-16 flex flex-col items-center justify-center text-center">

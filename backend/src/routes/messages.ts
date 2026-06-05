@@ -41,9 +41,16 @@ router.get('/', requireAuth, (req: AuthRequest, res: Response, next: NextFunctio
       conditions.push('type = ?');
       params.push(type);
     }
-    if (is_read !== undefined && (is_read === 0 || is_read === 1)) {
+    let isReadNum: 0 | 1 | undefined;
+    if (is_read !== undefined && is_read !== null) {
+      const parsed = typeof is_read === 'string' ? parseInt(is_read) : is_read;
+      if (parsed === 0 || parsed === 1) {
+        isReadNum = parsed;
+      }
+    }
+    if (isReadNum !== undefined) {
       conditions.push('is_read = ?');
-      params.push(is_read);
+      params.push(isReadNum);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -210,18 +217,10 @@ router.post('/', requireAuth, (req: AuthRequest, res: Response, next: NextFuncti
       throw err;
     }
 
-    if (send_to_all) {
-      createdMessages.forEach((msg) => {
-        broadcastMessage(msg);
-        sendUnreadCountUpdate(msg.receiver_id, getUnreadCount(db, msg.receiver_id));
-      });
-    } else {
-      const userIds = createdMessages.map((m) => m.receiver_id);
-      sendMessageToUsers(userIds, createdMessages[0]);
-      createdMessages.forEach((msg) => {
-        sendUnreadCountUpdate(msg.receiver_id, getUnreadCount(db, msg.receiver_id));
-      });
-    }
+    createdMessages.forEach((msg) => {
+      sendMessageToUser(msg.receiver_id, msg);
+      sendUnreadCountUpdate(msg.receiver_id, getUnreadCount(db, msg.receiver_id));
+    });
 
     const response: ApiResponse<Message[]> = {
       success: true,
