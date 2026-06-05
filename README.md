@@ -23,7 +23,7 @@
 
 ### 后端
 - Express.js
-- better-sqlite3（原生 SQLite 驱动）
+- Node.js 内置 `node:sqlite`（原生 SQLite 驱动，无需编译）
 - CORS 中间件
 - TypeScript
 

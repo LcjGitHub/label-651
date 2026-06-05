@@ -198,7 +198,7 @@ export default function Home() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      ID
+                      编号
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       姓名
@@ -229,7 +229,7 @@ export default function Home() {
                       }`}
                     >
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        #{user.id}
+                        {user.id}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-3">
