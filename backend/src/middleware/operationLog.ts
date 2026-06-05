@@ -81,6 +81,48 @@ export const getRecordById = (tableName: string, id: number): Record<string, unk
   return result as Record<string, unknown> | undefined;
 };
 
+export const getUserWithRoles = (id: number): Record<string, unknown> | undefined => {
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+  if (!user) return undefined;
+
+  const roles = db.prepare(`
+    SELECT r.* FROM roles r
+    INNER JOIN user_roles ur ON r.id = ur.role_id
+    WHERE ur.user_id = ?
+    ORDER BY r.id
+  `).all(id);
+
+  const roleIds = roles.map((r: any) => r.id);
+
+  return {
+    ...user,
+    roles,
+    role_ids: roleIds,
+  };
+};
+
+export const getRoleWithPermissions = (id: number): Record<string, unknown> | undefined => {
+  const db = getDb();
+  const role = db.prepare('SELECT * FROM roles WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+  if (!role) return undefined;
+
+  const permissions = db.prepare(`
+    SELECT p.* FROM permissions p
+    INNER JOIN role_permissions rp ON p.id = rp.permission_id
+    WHERE rp.role_id = ?
+    ORDER BY p.id
+  `).all(id);
+
+  const permissionIds = permissions.map((p: any) => p.id);
+
+  return {
+    ...role,
+    permissions,
+    permission_ids: permissionIds,
+  };
+};
+
 export const getDataFromResponse = (res: any): Record<string, unknown> | undefined => {
   const responseData = res.locals?.responseData;
   if (responseData && responseData.success && responseData.data) {

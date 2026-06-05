@@ -246,6 +246,91 @@ export const initDatabase = (): DatabaseSync => {
     }
   }
 
+  const migrateSystemLogPermission = () => {
+    const database = db!;
+    const systemLogPerm = database
+      .prepare('SELECT id FROM permissions WHERE code = ?')
+      .get('system:log') as { id: number } | undefined;
+
+    let permId: number;
+
+    if (!systemLogPerm) {
+      const systemSettingPerm = database
+        .prepare('SELECT id FROM permissions WHERE code = ?')
+        .get('system:view') as { id: number } | undefined;
+
+      let parentId = 0;
+      if (!systemSettingPerm) {
+        const result = database
+          .prepare(
+            `INSERT INTO permissions (name, code, type, parent_id, path, component, icon, sort_order, description)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            '系统设置',
+            'system:view',
+            'menu',
+            0,
+            '/system',
+            'System',
+            'Settings',
+            3,
+            '系统设置菜单'
+          );
+        parentId = result.lastInsertRowid as number;
+      } else {
+        parentId = systemSettingPerm.id;
+      }
+
+      const result = database
+        .prepare(
+          `INSERT INTO permissions (name, code, type, parent_id, path, component, icon, sort_order, description)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          '系统日志',
+          'system:log',
+          'action',
+          parentId,
+          '',
+          '',
+          '',
+          1,
+          '查看系统日志'
+        );
+      permId = result.lastInsertRowid as number;
+      console.log('迁移：补充「系统日志」权限成功');
+    } else {
+      permId = systemLogPerm.id;
+    }
+
+    const superAdminRole = database
+      .prepare('SELECT id FROM roles WHERE code = ?')
+      .get('super_admin') as { id: number } | undefined;
+
+    if (superAdminRole) {
+      const existing = database
+        .prepare('SELECT 1 FROM role_permissions WHERE role_id = ? AND permission_id = ?')
+        .get(superAdminRole.id, permId);
+
+      if (!existing) {
+        database
+          .prepare('INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)')
+          .run(superAdminRole.id, permId);
+        console.log('迁移：为超级管理员分配「系统日志」权限成功');
+      }
+    }
+  };
+
+  try {
+    db!.exec('BEGIN TRANSACTION');
+    migrateSystemLogPermission();
+    db!.exec('COMMIT');
+  } catch (err) {
+    db!.exec('ROLLBACK');
+    console.error('数据库迁移失败:', err);
+  }
+
   console.log('数据库初始化成功');
   return db;
 };

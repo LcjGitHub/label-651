@@ -6,6 +6,7 @@ import permissionsRouter from './routes/permissions';
 import authRouter from './routes/auth';
 import operationLogsRouter from './routes/operationLogs';
 import { errorHandler, notFound } from './middleware/errorHandler';
+import { globalOperationLogMiddleware } from './middleware/globalOperationLog';
 import { initDatabase } from './database';
 
 const app = express();
@@ -26,6 +27,8 @@ app.use(
 );
 
 app.use(express.json({ limit: '10mb' }));
+
+app.use(globalOperationLogMiddleware());
 
 app.get('/api/health', (req, res) => {
   res.json({

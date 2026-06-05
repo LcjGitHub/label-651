@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Users, Loader2, Shield, UserCog, LogOut } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, Loader2, Shield, UserCog, LogOut, FileText } from 'lucide-react';
 import { User, UserCreate, UserUpdate, Toast as ToastType } from '@/types';
 import { userApi } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
@@ -22,6 +22,7 @@ export default function Home() {
   const [formLoading, setFormLoading] = useState(false);
 
   const canViewRoleList = hasPermission('role:list');
+  const canViewOperationLogs = hasPermission('system:log');
   const canCreateUser = hasPermission('user:create');
   const canUpdateUser = hasPermission('user:update');
   const canDeleteUser = hasPermission('user:delete');
@@ -57,6 +58,14 @@ export default function Home() {
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  useEffect(() => {
+    const state = location.state as { message?: string } | null;
+    if (state?.message) {
+      showToast('error', state.message);
+      navigate('/', { replace: true, state: {} });
+    }
+  }, [location.state, navigate]);
 
   const showToast = (type: ToastType['type'], message: string) => {
     const id = Date.now();
@@ -201,6 +210,19 @@ export default function Home() {
               >
                 <Shield size={16} />
                 角色管理
+              </Link>
+            )}
+            {canViewOperationLogs && (
+              <Link
+                to="/operation-logs"
+                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+                  location.pathname === '/operation-logs'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <FileText size={16} />
+                操作日志
               </Link>
             )}
           </div>

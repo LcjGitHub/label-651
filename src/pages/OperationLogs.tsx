@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { FileText, Eye, Loader2, Users, Shield, UserCog, LogOut, RotateCcw, Search, ChevronLeft, ChevronRight } from 'lucide-react';
-import { OperationLog, OperationType, Toast as ToastType, OperationLogQuery } from '@/types';
+import { OperationLog, OperationType, Toast as ToastType, OperationLogQuery, OperationLogDetail } from '@/types';
 import { operationLogApi } from '@/services/api';
 import Toast from '@/components/Toast';
 import LogDetailModal from '@/components/LogDetailModal';
@@ -32,11 +32,35 @@ export default function OperationLogs() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  useEffect(() => {
+    if (!hasPermission('system:log')) {
+      setTimeout(() => {
+        navigate('/', { state: { message: '您没有访问操作日志的权限' } });
+      }, 100);
+    }
+  }, [hasPermission, navigate]);
+
+  if (!hasPermission('system:log')) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Shield className="text-red-500" size={40} />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">无访问权限</h2>
+          <p className="text-gray-500 mb-4">您没有访问操作日志的权限</p>
+          <p className="text-sm text-gray-400">正在跳转到首页...</p>
+        </div>
+      </div>
+    );
+  }
+
   const [logs, setLogs] = useState<OperationLog[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const pageSize = 20;
+  const [permissionError, setPermissionError] = useState(false);
 
   const [filters, setFilters] = useState<OperationLogQuery>({
     operator_id: undefined,
@@ -62,6 +86,67 @@ export default function OperationLogs() {
     navigate('/login');
   };
 
+  const getChangeSummary = (log: OperationLog): string => {
+    try {
+      const detail = JSON.parse(log.detail) as OperationLogDetail;
+
+      if (log.operation_type === 'CREATE') {
+        const fieldNames = detail.after ? Object.keys(detail.after).slice(0, 3) : [];
+        if (fieldNames.length > 0) {
+          return `新增：${fieldNames.join('、')}`;
+        }
+        return '新增记录';
+      }
+
+      if (log.operation_type === 'DELETE') {
+        const fieldNames = detail.before ? Object.keys(detail.before).slice(0, 3) : [];
+        if (fieldNames.length > 0) {
+          return `删除：${fieldNames.join('、')}`;
+        }
+        return '删除记录';
+      }
+
+      if (log.operation_type === 'UPDATE' && detail.changes) {
+        const changes = Object.entries(detail.changes);
+        if (changes.length === 0) {
+          return '无实际变更';
+        }
+
+        const fieldLabelMap: Record<string, string> = {
+          name: '姓名',
+          email: '邮箱',
+          phone: '手机',
+          password: '密码',
+          status: '状态',
+          role_ids: '角色',
+          permission_ids: '权限',
+          description: '描述',
+          code: '编码',
+          type: '类型',
+        };
+
+        const summaries = changes.slice(0, 2).map(([key, value]) => {
+          const label = fieldLabelMap[key] || key;
+          const changeValue = value as { old: unknown; new: unknown };
+          const oldVal = String(changeValue.old ?? '空').slice(0, 10);
+          const newVal = String(changeValue.new ?? '空').slice(0, 10);
+          return `${label}：${oldVal}→${newVal}`;
+        });
+
+        let summary = summaries.join('；');
+        if (changes.length > 2) {
+          summary += ` 等${changes.length}项变更`;
+        }
+
+        return summary;
+      }
+
+      return '编辑记录';
+    } catch {
+      return '查看详情';
+    }
+  };
+
   const showToast = (type: ToastType['type'], message: string) => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, type, message }]);
@@ -74,6 +159,7 @@ export default function OperationLogs() {
   const fetchLogs = useCallback(async (query?: OperationLogQuery) => {
     try {
       setLoading(true);
+      setPermissionError(false);
       const params: OperationLogQuery = {
         ...query,
         page,
@@ -86,7 +172,11 @@ export default function OperationLogs() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '加载日志列表失败';
-      showToast('error', message);
+      if (message.includes('权限') || message.includes('403') || message.includes('无权限')) {
+        setPermissionError(true);
+      } else {
+        showToast('error', message);
+      }
     } finally {
       setLoading(false);
     }
@@ -351,6 +441,18 @@ export default function OperationLogs() {
               <Loader2 className="animate-spin text-blue-600" size={40} />
               <p className="mt-4 text-gray-500">加载中...</p>
             </div>
+          ) : permissionError ? (
+            <div className="p-16 flex flex-col items-center justify-center text-center">
+              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <Shield className="text-red-500" size={40} />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                无访问权限
+              </h3>
+              <p className="text-gray-500 text-sm">
+                您没有访问操作日志的权限，请联系管理员
+              </p>
+            </div>
           ) : logs.length === 0 ? (
             <div className="p-16 flex flex-col items-center justify-center text-center">
               <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -386,6 +488,9 @@ export default function OperationLogs() {
                       </th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         操作时间
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        操作详情
                       </th>
                       <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         操作
@@ -432,6 +537,11 @@ export default function OperationLogs() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {formatDate(log.created_at)}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-700 max-w-xs">
+                            <div className="truncate" title={getChangeSummary(log)}>
+                              {getChangeSummary(log)}
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right">
                             <button

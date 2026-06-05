@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Shield, Loader2, Users, Key, UserCog, LogOut } from 'lucide-react';
+import { Plus, Edit2, Trash2, Shield, Loader2, Users, Key, UserCog, LogOut, FileText } from 'lucide-react';
 import { Role, RoleCreate, RoleUpdate, Toast as ToastType, Permission } from '@/types';
 import { roleApi, permissionApi } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
@@ -20,6 +20,7 @@ export default function Roles() {
   const location = useLocation();
 
   const canViewUserList = hasPermission('user:list');
+  const canViewOperationLogs = hasPermission('system:log');
   const canCreateRole = hasPermission('role:create');
   const canUpdateRole = hasPermission('role:update');
   const canDeleteRole = hasPermission('role:delete');
@@ -256,6 +257,19 @@ export default function Roles() {
               <Shield size={16} />
               角色管理
             </Link>
+            {canViewOperationLogs && (
+              <Link
+                to="/operation-logs"
+                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+                  location.pathname === '/operation-logs'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <FileText size={16} />
+                操作日志
+              </Link>
+            )}
           </div>
         </div>
 

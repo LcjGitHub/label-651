@@ -2,7 +2,6 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { getDb } from '../database';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest, requireAuth, requirePermission } from '../middleware/auth';
-import { withOperationLog, getRecordById, getDataFromResponse } from '../middleware/operationLog';
 import { Role, RoleCreate, RoleUpdate, Permission, ApiResponse } from '../types';
 
 const router = Router();
@@ -181,11 +180,6 @@ router.get('/:id/permissions', requireAuth, requirePermission('role:view'), (req
 });
 
 router.post('/', requireAuth, requirePermission('role:create'),
-  withOperationLog({
-    module: '角色管理',
-    operationType: 'CREATE',
-    getAfterData: async (req, res) => getDataFromResponse(res),
-  }),
   (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
@@ -265,15 +259,6 @@ router.post('/', requireAuth, requirePermission('role:create'),
 });
 
 router.put('/:id', requireAuth, requirePermission('role:update'),
-  withOperationLog({
-    module: '角色管理',
-    operationType: 'UPDATE',
-    getBeforeData: async (req) => {
-      const id = parseInt(req.params.id);
-      return getRecordById('roles', id);
-    },
-    getAfterData: async (req, res) => getDataFromResponse(res),
-  }),
   (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
@@ -385,30 +370,6 @@ router.put('/:id', requireAuth, requirePermission('role:update'),
 });
 
 router.put('/:id/permissions', requireAuth, requirePermission('role:assign'),
-  withOperationLog({
-    module: '角色管理',
-    operationType: 'UPDATE',
-    getBeforeData: async (req) => {
-      const id = parseInt(req.params.id);
-      const before = getRecordById('roles', id);
-      const db = getDb();
-      const perms = db.prepare('SELECT permission_id FROM role_permissions WHERE role_id = ?').all(id) as { permission_id: number }[];
-      return {
-        ...before,
-        permission_ids: perms.map(p => p.permission_id),
-      };
-    },
-    getAfterData: async (req, res) => {
-      const id = parseInt(req.params.id);
-      const after = getRecordById('roles', id);
-      const db = getDb();
-      const perms = db.prepare('SELECT permission_id FROM role_permissions WHERE role_id = ?').all(id) as { permission_id: number }[];
-      return {
-        ...after,
-        permission_ids: perms.map(p => p.permission_id),
-      };
-    },
-  }),
   (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
@@ -460,14 +421,6 @@ router.put('/:id/permissions', requireAuth, requirePermission('role:assign'),
 });
 
 router.delete('/:id', requireAuth, requirePermission('role:delete'),
-  withOperationLog({
-    module: '角色管理',
-    operationType: 'DELETE',
-    getBeforeData: async (req) => {
-      const id = parseInt(req.params.id);
-      return getRecordById('roles', id);
-    },
-  }),
   (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();

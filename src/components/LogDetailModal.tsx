@@ -29,8 +29,8 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, keyName, level = 0, isChanged
   };
 
   const renderValue = (value: unknown) => {
-    if (value === null) return <span className="text-gray-400">null</span>;
-    if (value === undefined) return <span className="text-gray-400">undefined</span>;
+    if (value === null) return <span className="text-gray-400">空</span>;
+    if (value === undefined) return <span className="text-gray-400">未定义</span>;
     if (typeof value === 'string') return <span className="text-green-600">"{value}"</span>;
     if (typeof value === 'number') return <span className="text-blue-600">{value}</span>;
     if (typeof value === 'boolean') return <span className="text-purple-600">{String(value)}</span>;
@@ -81,7 +81,7 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, keyName, level = 0, isChanged
         <span className="text-gray-500">{isArray ? '[' : '{'}</span>
         {entries.length > 0 && !expanded && (
           <span className="text-gray-400 mx-1">
-            {isArray ? `${entries.length} items` : `${entries.length} keys`}
+            {isArray ? `${entries.length} 项` : `${entries.length} 个键`}
           </span>
         )}
         {entries.length === 0 && (
