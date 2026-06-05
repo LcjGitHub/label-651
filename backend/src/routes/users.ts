@@ -1,5 +1,5 @@
 import { Router, Response, NextFunction } from 'express';
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx';
 import path from 'path';
 import fs from 'fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -37,7 +37,12 @@ router.get('/', requireAuth, requirePermission('user:list'), (req: AuthRequest, 
     const db = getDb();
     const search = req.query.search as string;
     let users: User[];
-    let total: number;
+
+    const allCount = db
+      .prepare('SELECT COUNT(*) as cnt FROM users')
+      .get() as { cnt: number };
+    const total = allCount.cnt;
+    let filteredTotal = total;
 
     if (search && search.trim()) {
       const searchTerm = `%${search.trim()}%`;
@@ -46,15 +51,11 @@ router.get('/', requireAuth, requirePermission('user:list'), (req: AuthRequest, 
           'SELECT * FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC'
         )
         .all(searchTerm, searchTerm) as unknown as User[];
-      total = users.length;
+      filteredTotal = users.length;
     } else {
       users = db
         .prepare('SELECT * FROM users ORDER BY created_at DESC')
         .all() as unknown as User[];
-      const countResult = db
-        .prepare('SELECT COUNT(*) as cnt FROM users')
-        .get() as { cnt: number };
-      total = countResult.cnt;
     }
 
     users = users.map((user) => ({
@@ -66,6 +67,7 @@ router.get('/', requireAuth, requirePermission('user:list'), (req: AuthRequest, 
       success: true,
       data: users,
       total,
+      filteredTotal,
     };
 
     res.json(response);

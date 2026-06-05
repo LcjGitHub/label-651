@@ -105,6 +105,7 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   message?: string;
   total?: number;
+  filteredTotal?: number;
 }
 
 export type OperationType = 'CREATE' | 'UPDATE' | 'DELETE';

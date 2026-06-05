@@ -6,6 +6,7 @@ interface ExportDropdownProps {
   selectedIds: number[];
   searchQuery: string;
   totalCount: number;
+  filteredCount: number;
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
   onExport: () => void;
 }
@@ -14,6 +15,7 @@ export default function ExportDropdown({
   selectedIds,
   searchQuery,
   totalCount,
+  filteredCount,
   showToast,
   onExport,
 }: ExportDropdownProps) {
@@ -106,7 +108,7 @@ export default function ExportDropdown({
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        disabled={isLoading || totalCount === 0}
+        disabled={isLoading || (totalCount === 0 && selectedIds.length === 0 && (!searchQuery || !searchQuery.trim()))}
         className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700
                    rounded-lg font-medium text-sm hover:bg-gray-50 hover:border-gray-400
                    transition-all duration-200
@@ -135,7 +137,7 @@ export default function ExportDropdown({
             <FileSpreadsheet size={16} className="text-gray-500" />
             <div className="flex-1 text-left">
               <p className="font-medium">导出全部用户</p>
-              <p className="text-xs text-gray-500">共 {totalCount} 条数据</p>
+              <p className="text-xs text-gray-500">数据库共 {totalCount} 条数据</p>
             </div>
           </button>
 
@@ -157,7 +159,7 @@ export default function ExportDropdown({
             <Search size={16} className="text-gray-500" />
             <div className="flex-1 text-left">
               <p className="font-medium">导出搜索结果</p>
-              <p className="text-xs text-gray-500">当前搜索条件匹配的用户</p>
+              <p className="text-xs text-gray-500">当前匹配 {filteredCount} 条数据</p>
             </div>
           </button>
 

@@ -1,0 +1,6 @@
+﻿姓名,邮箱,手机号,状态
+测试用户一,testuser1@example.com,13900000001,active
+测试用户二,testuser2@example.com,13900000002,inactive
+,invalid@example.com,13900000003,active
+测试用户三,not-an-email,13900000004,active
+测试用户四,zhangsan@example.com,13900000005,active

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Users, Loader2, Shield, UserCog, LogOut, FileText, Upload } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, Loader2, Shield, UserCog, LogOut, FileText, Upload, History } from 'lucide-react';
 import { User, UserCreate, UserUpdate, Toast as ToastType } from '@/types';
 import { userApi } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
@@ -7,6 +7,7 @@ import UserForm from '@/components/UserForm';
 import ConfirmModal from '@/components/ConfirmModal';
 import Toast from '@/components/Toast';
 import ImportModal from '@/components/ImportModal';
+import ImportHistoryModal from '@/components/ImportHistoryModal';
 import ExportDropdown from '@/components/ExportDropdown';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -16,6 +17,7 @@ export default function Home() {
   const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
+  const [filteredTotal, setFilteredTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -33,6 +35,7 @@ export default function Home() {
 
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importHistoryModalOpen, setImportHistoryModalOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -52,7 +55,9 @@ export default function Home() {
       const response = await userApi.getUsers(search);
       if (response.success && response.data) {
         setUsers(response.data);
-        setTotal(response.total || response.data.length);
+        const dbTotal = response.total || response.data.length;
+        setTotal(dbTotal);
+        setFilteredTotal(response.filteredTotal ?? dbTotal);
         setSelectedIds([]);
       }
     } catch (err) {
@@ -260,7 +265,13 @@ export default function Home() {
             <div>
               <h2 className="text-xl font-bold text-gray-900">用户列表</h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                共 {total} 位用户
+                {searchQuery && searchQuery.trim() ? (
+                  <>
+                    当前匹配 {filteredTotal} 位用户 · 数据库共 {total} 位
+                  </>
+                ) : (
+                  <>共 {total} 位用户</>
+                )}
                 {selectedIds.length > 0 && (
                   <span className="ml-2 text-blue-600">（已选 {selectedIds.length} 位）</span>
                 )}
@@ -268,21 +279,33 @@ export default function Home() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {canImportUser && (
-                <button
-                  onClick={() => setImportModalOpen(true)}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700
-                             rounded-lg font-medium text-sm hover:bg-gray-50 hover:border-gray-400
-                             transition-all duration-200 shadow-sm"
-                >
-                  <Upload size={18} />
-                  导入
-                </button>
+                <>
+                  <button
+                    onClick={() => setImportModalOpen(true)}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700
+                               rounded-lg font-medium text-sm hover:bg-gray-50 hover:border-gray-400
+                               transition-all duration-200 shadow-sm"
+                  >
+                    <Upload size={18} />
+                    导入
+                  </button>
+                  <button
+                    onClick={() => setImportHistoryModalOpen(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-600
+                               rounded-lg font-medium text-sm hover:bg-gray-50 hover:border-gray-400
+                               transition-all duration-200 shadow-sm"
+                    title="查看导入历史"
+                  >
+                    <History size={18} />
+                  </button>
+                </>
               )}
               {canExportUser && (
                 <ExportDropdown
                   selectedIds={selectedIds}
                   searchQuery={searchQuery}
                   totalCount={total}
+                  filteredCount={filteredTotal}
                   showToast={showToast}
                   onExport={() => {}}
                 />
@@ -518,6 +541,12 @@ export default function Home() {
           isOpen={importModalOpen}
           onClose={() => setImportModalOpen(false)}
           onSuccess={() => fetchUsers(searchQuery)}
+          showToast={showToast}
+        />
+
+        <ImportHistoryModal
+          isOpen={importHistoryModalOpen}
+          onClose={() => setImportHistoryModalOpen(false)}
           showToast={showToast}
         />
       </div>
