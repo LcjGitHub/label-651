@@ -10,7 +10,7 @@ import messagesRouter from './routes/messages';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { globalOperationLogMiddleware } from './middleware/globalOperationLog';
 import { initDatabase } from './database';
-import { exportsDir } from './middleware/upload';
+import { exportsDir, avatarsDir } from './middleware/upload';
 import { initWebSocket } from './services/wsService';
 
 const app = express();
@@ -34,6 +34,7 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 
 app.use('/api/exports', express.static(exportsDir));
+app.use('/api/avatars', express.static(avatarsDir));
 
 app.use(globalOperationLogMiddleware());
 

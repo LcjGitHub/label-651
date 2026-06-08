@@ -485,10 +485,23 @@ export const initDatabase = (): DatabaseSync => {
     }
   };
 
+  const migrateAvatarField = () => {
+    const database = db!;
+    const columns = database
+      .prepare("PRAGMA table_info(users)")
+      .all() as unknown as { name: string }[];
+    const hasAvatar = columns.some((col) => col.name === 'avatar');
+    if (!hasAvatar) {
+      database.exec('ALTER TABLE users ADD COLUMN avatar VARCHAR(500)');
+      console.log('迁移：为 users 表添加 avatar 字段成功');
+    }
+  };
+
   try {
     db!.exec('BEGIN TRANSACTION');
     migrateSystemLogPermission();
     migrateImportExportPermissions();
+    migrateAvatarField();
     db!.exec('COMMIT');
   } catch (err) {
     db!.exec('ROLLBACK');

@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { getDb } from '../database';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest, requireAuth, requirePermission } from '../middleware/auth';
-import { upload, exportsDir } from '../middleware/upload';
+import { upload, exportsDir, avatarUpload } from '../middleware/upload';
 import { User, UserCreate, UserUpdate, Role, ApiResponse, ImportHistory, ImportResult, UserDetail, OperationLog } from '../types';
 
 const router = Router();
@@ -208,12 +208,13 @@ router.post('/', requireAuth, requirePermission('user:create'),
     try {
       const result = db
         .prepare(
-          'INSERT INTO users (name, email, phone, status) VALUES (?, ?, ?, ?)'
+          'INSERT INTO users (name, email, phone, avatar, status) VALUES (?, ?, ?, ?, ?)'
         )
         .run(
           name.trim(),
           email.trim(),
           phone || '',
+          (req.body as UserCreate).avatar || null,
           status || 'active'
         );
 
@@ -299,6 +300,10 @@ router.put('/:id', requireAuth, requirePermission('user:update'),
       if (phone !== undefined) {
         updateFields.push('phone = ?');
         updateValues.push(phone || '');
+      }
+      if ((req.body as UserUpdate).avatar !== undefined) {
+        updateFields.push('avatar = ?');
+        updateValues.push((req.body as UserUpdate).avatar || null);
       }
       if (status !== undefined) {
         updateFields.push('status = ?');
@@ -786,6 +791,59 @@ router.get('/import/history', requireAuth, requirePermission('user:import'),
       success: true,
       data: history,
       total: history.length,
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+interface AvatarMulterRequest extends AuthRequest {
+  file?: Express.Multer.File;
+}
+
+router.post('/:id/avatar', requireAuth, requirePermission('user:update'),
+  avatarUpload.single('avatar'),
+  (req: AvatarMulterRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      throw new AppError('无效的用户ID', 400);
+    }
+
+    const existingUser = db
+      .prepare('SELECT * FROM users WHERE id = ?')
+      .get(id) as unknown as User;
+
+    if (!existingUser) {
+      throw new AppError('用户不存在', 404);
+    }
+
+    const file = req.file;
+    if (!file) {
+      throw new AppError('请选择要上传的头像图片', 400);
+    }
+
+    const avatarUrl = `/api/avatars/${file.filename}`;
+
+    db
+      .prepare('UPDATE users SET avatar = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(avatarUrl, id);
+
+    const updatedUser = db
+      .prepare('SELECT * FROM users WHERE id = ?')
+      .get(id) as unknown as User;
+    updatedUser.roles = getUserRoles(db, id);
+
+    const response: ApiResponse<{ avatarUrl: string; user: User }> = {
+      success: true,
+      data: {
+        avatarUrl,
+        user: updatedUser,
+      },
+      message: '头像上传成功',
     };
 
     res.json(response);

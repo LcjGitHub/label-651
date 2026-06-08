@@ -11,6 +11,7 @@ import ImportHistoryModal from '@/components/ImportHistoryModal';
 import ExportDropdown from '@/components/ExportDropdown';
 import AppHeader from '@/components/AppHeader';
 import UserDetailModal from '@/components/UserDetailModal';
+import UserAvatar from '@/components/UserAvatar';
 import SortHeaderIcon, { SortFieldType, SortOrderType } from '@/components/SortHeaderIcon';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -478,10 +479,7 @@ export default function Home() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600
-                                        flex items-center justify-center text-white font-medium text-sm shadow">
-                            {user.name.charAt(0)}
-                          </div>
+                          <UserAvatar name={user.name} avatar={user.avatar} size="md" />
                           <span className="text-sm font-medium text-gray-900">
                             {user.name}
                           </span>

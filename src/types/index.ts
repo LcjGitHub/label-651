@@ -3,6 +3,7 @@ export interface User {
   name: string;
   email: string;
   phone: string;
+  avatar: string | null;
   status: 'active' | 'inactive';
   created_at: string;
   updated_at: string;
@@ -13,6 +14,7 @@ export interface UserCreate {
   name: string;
   email: string;
   phone: string;
+  avatar?: string;
   status: 'active' | 'inactive';
   role_ids?: number[];
 }
@@ -21,6 +23,7 @@ export interface UserUpdate {
   name?: string;
   email?: string;
   phone?: string;
+  avatar?: string;
   status?: 'active' | 'inactive';
   role_ids?: number[];
 }

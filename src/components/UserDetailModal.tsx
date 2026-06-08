@@ -2,6 +2,7 @@ import { X, Edit2, Shield, Loader2, Eye } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { User, UserDetail as UserDetailType, OperationLog, OperationType } from '@/types';
 import { userApi } from '@/services/api';
+import UserAvatar from './UserAvatar';
 
 interface UserDetailModalProps {
   isOpen: boolean;
@@ -161,10 +162,12 @@ export default function UserDetailModal({ isOpen, onClose, userId, onEdit, canEd
 
                 <div className="bg-gray-50 rounded-xl p-5">
                   <div className="flex items-start gap-4 mb-6">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600
-                                  flex items-center justify-center text-white font-bold text-2xl shadow-md flex-shrink-0">
-                      {detail.user.name.charAt(0)}
-                    </div>
+                    <UserAvatar
+                      name={detail.user.name}
+                      avatar={detail.user.avatar}
+                      size="xl"
+                      className="flex-shrink-0"
+                    />
                     <div className="flex-1 min-w-0">
                       <h4 className="text-xl font-semibold text-gray-900">{detail.user.name}</h4>
                       <p className="text-sm text-gray-500 mt-0.5 break-all">{detail.user.email}</p>

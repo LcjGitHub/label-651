@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useMessageStore } from '@/store/messageStore';
 import { useEffect } from 'react';
 import MessageDropdown from './MessageDropdown';
+import UserAvatar from './UserAvatar';
 import { Toast } from '@/types';
 
 interface AppHeaderProps {
@@ -52,6 +53,7 @@ export default function AppHeader({ showToast }: AppHeaderProps) {
         </div>
         <div className="flex items-center gap-4">
           <MessageDropdown showToast={showToast} />
+          <UserAvatar name={user?.name || 'U'} avatar={user?.avatar} size="md" />
           <div className="text-right">
             <p className="text-sm font-medium text-gray-900">{user?.name}</p>
             <p className="text-xs text-gray-500">{user?.email}</p>

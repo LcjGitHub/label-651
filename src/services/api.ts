@@ -221,6 +221,51 @@ export const userApi = {
   getImportHistory: async (): Promise<ApiResponse<ImportHistory[]>> => {
     return handleRequest<ApiResponse<ImportHistory[]>>(`${API_BASE_URL}/users/import/history`);
   },
+
+  uploadAvatar: async (
+    userId: number,
+    file: File,
+    onProgress?: (percent: number) => void
+  ): Promise<ApiResponse<{ avatarUrl: string; user: User }>> => {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_BASE_URL}/users/${userId}/avatar`);
+
+      const currentUserId = getCurrentUserId();
+      if (currentUserId) {
+        xhr.setRequestHeader('x-user-id', String(currentUserId));
+      }
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      };
+
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(data);
+          } else {
+            reject(new Error(data.message || '头像上传失败'));
+          }
+        } catch {
+          reject(new Error('响应数据解析失败'));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new Error('网络请求失败'));
+      };
+
+      xhr.send(formData);
+    });
+  },
 };
 
 export const roleApi = {

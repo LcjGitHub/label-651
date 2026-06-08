@@ -1,7 +1,9 @@
-import { X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { X, Upload, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { User, UserCreate, UserUpdate } from '@/types';
+import { userApi } from '@/services/api';
 import RoleSelect from './RoleSelect';
+import UserAvatar from './UserAvatar';
 
 interface UserFormProps {
   isOpen: boolean;
@@ -15,6 +17,7 @@ interface FormErrors {
   name?: string;
   email?: string;
   phone?: string;
+  avatar?: string;
 }
 
 export default function UserForm({
@@ -30,8 +33,14 @@ export default function UserForm({
     phone: '',
     status: 'active',
     role_ids: [],
+    avatar: undefined,
   });
   const [errors, setErrors] = useState<FormErrors>({});
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [previewAvatar, setPreviewAvatar] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) {
@@ -41,7 +50,9 @@ export default function UserForm({
         phone: user.phone,
         status: user.status,
         role_ids: user.roles?.map((r) => r.id) || [],
+        avatar: user.avatar || undefined,
       });
+      setPreviewAvatar(user.avatar || null);
     } else {
       setFormData({
         name: '',
@@ -49,9 +60,13 @@ export default function UserForm({
         phone: '',
         status: 'active',
         role_ids: [],
+        avatar: undefined,
       });
+      setPreviewAvatar(null);
     }
     setErrors({});
+    setAvatarUploading(false);
+    setUploadProgress(0);
   }, [user, isOpen]);
 
   useEffect(() => {
@@ -91,6 +106,92 @@ export default function UserForm({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const validateImageFile = (file: File): string | null => {
+    const maxSize = 2 * 1024 * 1024;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+
+    if (!allowedTypes.includes(file.type)) {
+      return '只允许上传 JPG、PNG 或 GIF 格式的图片';
+    }
+    if (file.size > maxSize) {
+      return '图片大小不能超过 2MB';
+    }
+    return null;
+  };
+
+  const handleAvatarFile = async (file: File) => {
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      setErrors((prev) => ({ ...prev, avatar: validationError }));
+      return;
+    }
+
+    setErrors((prev) => ({ ...prev, avatar: undefined }));
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setPreviewAvatar(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    if (user) {
+      try {
+        setAvatarUploading(true);
+        setUploadProgress(0);
+
+        const response = await userApi.uploadAvatar(user.id, file, (percent) => {
+          setUploadProgress(percent);
+        });
+
+        if (response.success && response.data) {
+          setFormData((prev) => ({ ...prev, avatar: response.data!.avatarUrl }));
+          setPreviewAvatar(response.data!.avatarUrl);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '头像上传失败';
+        setErrors((prev) => ({ ...prev, avatar: message }));
+        setPreviewAvatar(user.avatar || null);
+      } finally {
+        setAvatarUploading(false);
+        setUploadProgress(0);
+      }
+    } else {
+      setFormData((prev) => ({ ...prev, avatar: file.name }));
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleAvatarFile(file);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleAvatarFile(file);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -147,6 +248,70 @@ export default function UserForm({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              头像
+            </label>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => !avatarUploading && fileInputRef.current?.click()}
+              className={`relative flex items-center justify-center gap-4 p-4 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ${
+                isDragging
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'
+              } ${avatarUploading ? 'cursor-not-allowed opacity-60' : ''}`}
+            >
+              <div className="flex items-center gap-4">
+                <UserAvatar
+                  name={formData.name || 'U'}
+                  avatar={previewAvatar}
+                  size="xl"
+                />
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Upload size={16} />
+                    <span className="font-medium">
+                      {avatarUploading ? '上传中...' : '点击或拖拽上传头像'}
+                    </span>
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    支持 JPG、PNG、GIF 格式，大小不超过 2MB
+                  </span>
+                </div>
+              </div>
+
+              {avatarUploading && (
+                <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl">
+                  <div className="flex flex-col items-center gap-2 w-3/4">
+                    <Loader2 className="animate-spin text-blue-600" size={24} />
+                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-200"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-600 font-medium">
+                      {uploadProgress}%
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </div>
+            {errors.avatar && (
+              <p className="mt-1 text-xs text-red-500">{errors.avatar}</p>
+            )}
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               姓名 <span className="text-red-500">*</span>
@@ -249,7 +414,7 @@ export default function UserForm({
             <button
               type="button"
               onClick={onClose}
-              disabled={isLoading}
+              disabled={isLoading || avatarUploading}
               className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-gray-100
                          rounded-lg hover:bg-gray-200 transition-colors duration-150
                          disabled:opacity-50 disabled:cursor-not-allowed"
@@ -258,7 +423,7 @@ export default function UserForm({
             </button>
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || avatarUploading}
               className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600
                          rounded-lg hover:bg-blue-700 transition-colors duration-150
                          disabled:opacity-50 disabled:cursor-not-allowed"
