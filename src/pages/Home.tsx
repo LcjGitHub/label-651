@@ -352,109 +352,53 @@ export default function Home() {
     }
   };
 
+  const executeBatchOperation = async (action: 'delete' | 'enable' | 'disable') => {
+    if (selectedIds.length === 0) return;
+    setBatchAction(action);
+    try {
+      setBatchLoading(true);
+      const response = await userApi.batchOperateUsers(action, selectedIds);
+      if (response.data) {
+        const result = response.data;
+        const toastType = result.fail > 0 ? 'info' : 'success';
+        showToast(
+          toastType,
+          response.message || `批量${action === 'delete' ? '删除' : action === 'enable' ? '启用' : '禁用'}完成：成功${result.success}条，失败${result.fail}条`
+        );
+        if (result.failReasons && result.failReasons.length > 0) {
+          setTimeout(() => {
+            showToast(
+              'error',
+              `失败详情：${result.failReasons.map((f) => `ID${f.id}:${f.reason}`).join('; ')}`
+            );
+          }, 500);
+        }
+        setSelectedIds([]);
+        fetchUsers();
+      }
+    } catch (err) {
+      const actionLabel = action === 'delete' ? '删除' : action === 'enable' ? '启用' : '禁用';
+      const message = err instanceof Error ? err.message : `批量${actionLabel}失败`;
+      showToast('error', message);
+    } finally {
+      setBatchLoading(false);
+      setBatchAction(null);
+    }
+  };
+
   const handleBatchDeleteClick = () => {
     if (selectedIds.length === 0) return;
     setBatchAction('delete');
     setBatchDeleteModalOpen(true);
   };
 
-  const handleBatchEnableClick = async () => {
-    if (selectedIds.length === 0) return;
-    setBatchAction('enable');
-    try {
-      setBatchLoading(true);
-      const response = await userApi.batchEnableUsers(selectedIds);
-      if (response.success && response.data) {
-        const result = response.data;
-        const toastType = result.fail > 0 ? 'info' : 'success';
-        showToast(
-          toastType,
-          response.message || `批量启用完成：成功${result.success}条，失败${result.fail}条`
-        );
-        if (result.failReasons && result.failReasons.length > 0) {
-          setTimeout(() => {
-            showToast(
-              'error',
-              `失败详情：${result.failReasons.map((f) => `ID${f.id}:${f.reason}`).join('; ')}`
-            );
-          }, 500);
-        }
-        setSelectedIds([]);
-        fetchUsers();
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '批量启用失败';
-      showToast('error', message);
-    } finally {
-      setBatchLoading(false);
-      setBatchAction(null);
-    }
-  };
+  const handleBatchEnableClick = () => executeBatchOperation('enable');
 
-  const handleBatchDisableClick = async () => {
-    if (selectedIds.length === 0) return;
-    setBatchAction('disable');
-    try {
-      setBatchLoading(true);
-      const response = await userApi.batchDisableUsers(selectedIds);
-      if (response.success && response.data) {
-        const result = response.data;
-        const toastType = result.fail > 0 ? 'info' : 'success';
-        showToast(
-          toastType,
-          response.message || `批量禁用完成：成功${result.success}条，失败${result.fail}条`
-        );
-        if (result.failReasons && result.failReasons.length > 0) {
-          setTimeout(() => {
-            showToast(
-              'error',
-              `失败详情：${result.failReasons.map((f) => `ID${f.id}:${f.reason}`).join('; ')}`
-            );
-          }, 500);
-        }
-        setSelectedIds([]);
-        fetchUsers();
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '批量禁用失败';
-      showToast('error', message);
-    } finally {
-      setBatchLoading(false);
-      setBatchAction(null);
-    }
-  };
+  const handleBatchDisableClick = () => executeBatchOperation('disable');
 
-  const handleBatchDeleteConfirm = async () => {
-    if (selectedIds.length === 0) return;
-    try {
-      setBatchLoading(true);
-      const response = await userApi.batchDeleteUsers(selectedIds);
-      if (response.success && response.data) {
-        const result = response.data;
-        const toastType = result.fail > 0 ? 'info' : 'success';
-        showToast(
-          toastType,
-          response.message || `批量删除完成：成功${result.success}条，失败${result.fail}条`
-        );
-        if (result.failReasons && result.failReasons.length > 0) {
-          setTimeout(() => {
-            showToast(
-              'error',
-              `失败详情：${result.failReasons.map((f) => `ID${f.id}:${f.reason}`).join('; ')}`
-            );
-          }, 500);
-        }
-        setBatchDeleteModalOpen(false);
-        setSelectedIds([]);
-        fetchUsers();
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '批量删除失败';
-      showToast('error', message);
-    } finally {
-      setBatchLoading(false);
-      setBatchAction(null);
-    }
+  const handleBatchDeleteConfirm = () => {
+    setBatchDeleteModalOpen(false);
+    executeBatchOperation('delete');
   };
 
   const formatDate = (dateStr: string) => {
@@ -468,10 +412,83 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 relative">
       <Toast toasts={toasts} onRemove={removeToast} />
 
-      <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-blue-200 shadow-2xl px-4 py-3">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-600 text-white rounded-full text-sm font-medium">
+                <CheckCircle2 size={14} />
+                已选 {selectedIds.length} 条
+              </span>
+              <button
+                onClick={() => setSelectedIds([])}
+                className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                <X size={14} />
+                取消选择
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {canUpdateUser && (
+                <button
+                  onClick={handleBatchEnableClick}
+                  disabled={batchLoading}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white
+                             rounded-lg font-medium text-sm hover:bg-green-700 hover:shadow
+                             disabled:opacity-50 disabled:cursor-not-allowed
+                             transition-all duration-200"
+                >
+                  {batchLoading && batchAction === 'enable' ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    <CheckCircle2 size={16} />
+                  )}
+                  批量启用
+                </button>
+              )}
+              {canUpdateUser && (
+                <button
+                  onClick={handleBatchDisableClick}
+                  disabled={batchLoading}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-yellow-600 text-white
+                             rounded-lg font-medium text-sm hover:bg-yellow-700 hover:shadow
+                             disabled:opacity-50 disabled:cursor-not-allowed
+                             transition-all duration-200"
+                >
+                  {batchLoading && batchAction === 'disable' ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    <XCircle size={16} />
+                  )}
+                  批量禁用
+                </button>
+              )}
+              {canDeleteUser && (
+                <button
+                  onClick={handleBatchDeleteClick}
+                  disabled={batchLoading}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white
+                             rounded-lg font-medium text-sm hover:bg-red-700 hover:shadow
+                             disabled:opacity-50 disabled:cursor-not-allowed
+                             transition-all duration-200"
+                >
+                  {batchLoading && batchAction === 'delete' ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    <Trash2 size={16} />
+                  )}
+                  批量删除
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={`max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 ${selectedIds.length > 0 ? 'pb-24' : ''}`}>
         <AppHeader showToast={showToast} />
 
         <div className="mb-8">
@@ -808,76 +825,6 @@ export default function Home() {
                 </tbody>
               </table>
             </div>
-            {selectedIds.length > 0 && (
-              <div className="px-6 py-3 border-t border-blue-200 bg-blue-50 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-600 text-white rounded-full text-sm font-medium">
-                    <CheckCircle2 size={14} />
-                    已选 {selectedIds.length} 项
-                  </span>
-                  <button
-                    onClick={() => setSelectedIds([])}
-                    className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
-                  >
-                    <X size={14} />
-                    取消选择
-                  </button>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {canUpdateUser && (
-                    <button
-                      onClick={handleBatchEnableClick}
-                      disabled={batchLoading}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white
-                                 rounded-lg font-medium text-sm hover:bg-green-700 hover:shadow
-                                 disabled:opacity-50 disabled:cursor-not-allowed
-                                 transition-all duration-200"
-                    >
-                      {batchLoading && batchAction === 'enable' ? (
-                        <Loader2 className="animate-spin" size={16} />
-                      ) : (
-                        <CheckCircle2 size={16} />
-                      )}
-                      批量启用
-                    </button>
-                  )}
-                  {canUpdateUser && (
-                    <button
-                      onClick={handleBatchDisableClick}
-                      disabled={batchLoading}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-yellow-600 text-white
-                                 rounded-lg font-medium text-sm hover:bg-yellow-700 hover:shadow
-                                 disabled:opacity-50 disabled:cursor-not-allowed
-                                 transition-all duration-200"
-                    >
-                      {batchLoading && batchAction === 'disable' ? (
-                        <Loader2 className="animate-spin" size={16} />
-                      ) : (
-                        <XCircle size={16} />
-                      )}
-                      批量禁用
-                    </button>
-                  )}
-                  {canDeleteUser && (
-                    <button
-                      onClick={handleBatchDeleteClick}
-                      disabled={batchLoading}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white
-                                 rounded-lg font-medium text-sm hover:bg-red-700 hover:shadow
-                                 disabled:opacity-50 disabled:cursor-not-allowed
-                                 transition-all duration-200"
-                    >
-                      {batchLoading && batchAction === 'delete' ? (
-                        <Loader2 className="animate-spin" size={16} />
-                      ) : (
-                        <Trash2 size={16} />
-                      )}
-                      批量删除
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
             {users.length > 0 && (
               <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-2 text-sm text-gray-600">
