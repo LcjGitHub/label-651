@@ -7,7 +7,7 @@ import { getDb } from '../database';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest, requireAuth, requirePermission } from '../middleware/auth';
 import { upload, exportsDir } from '../middleware/upload';
-import { User, UserCreate, UserUpdate, Role, ApiResponse, ImportHistory, ImportResult } from '../types';
+import { User, UserCreate, UserUpdate, Role, ApiResponse, ImportHistory, ImportResult, UserDetail, OperationLog } from '../types';
 
 const router = Router();
 
@@ -113,6 +113,49 @@ router.get('/:id', requireAuth, requirePermission('user:view'), (req: AuthReques
     const response: ApiResponse<User> = {
       success: true,
       data: user,
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/:id/detail', requireAuth, requirePermission('user:view'), (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      throw new AppError('无效的用户ID', 400);
+    }
+
+    const user = db
+      .prepare('SELECT * FROM users WHERE id = ?')
+      .get(id) as unknown as User;
+
+    if (!user) {
+      throw new AppError('用户不存在', 404);
+    }
+
+    user.roles = getUserRoles(db, id);
+
+    const logs = db
+      .prepare(
+        `SELECT * FROM operation_logs 
+         WHERE operator_id = ? 
+         ORDER BY created_at DESC 
+         LIMIT 10`
+      )
+      .all(id) as unknown as OperationLog[];
+
+    const detail: UserDetail = {
+      user,
+      operationLogs: logs,
+    };
+
+    const response: ApiResponse<UserDetail> = {
+      success: true,
+      data: detail,
     };
 
     res.json(response);

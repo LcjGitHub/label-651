@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit2, Trash2, Loader2, Shield, Upload, History, Users, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Loader2, Shield, Upload, History, Users, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye } from 'lucide-react';
 import { User, UserCreate, UserUpdate, Toast as ToastType } from '@/types';
 import { userApi, UserListQuery } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
@@ -10,6 +10,7 @@ import ImportModal from '@/components/ImportModal';
 import ImportHistoryModal from '@/components/ImportHistoryModal';
 import ExportDropdown from '@/components/ExportDropdown';
 import AppHeader from '@/components/AppHeader';
+import UserDetailModal from '@/components/UserDetailModal';
 import SortHeaderIcon, { SortFieldType, SortOrderType } from '@/components/SortHeaderIcon';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -35,11 +36,15 @@ export default function Home() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formLoading, setFormLoading] = useState(false);
 
+  const canViewUser = hasPermission('user:view');
   const canCreateUser = hasPermission('user:create');
   const canUpdateUser = hasPermission('user:update');
   const canDeleteUser = hasPermission('user:delete');
   const canImportUser = hasPermission('user:import');
   const canExportUser = hasPermission('user:export');
+
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [viewingUserId, setViewingUserId] = useState<number | null>(null);
 
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -175,6 +180,11 @@ export default function Home() {
   const handleAddClick = () => {
     setEditingUser(null);
     setFormOpen(true);
+  };
+
+  const handleViewClick = (user: User) => {
+    setViewingUserId(user.id);
+    setDetailModalOpen(true);
   };
 
   const handleEditClick = (user: User) => {
@@ -527,6 +537,16 @@ export default function Home() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {canViewUser && (
+                            <button
+                              onClick={() => handleViewClick(user)}
+                              className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50
+                                         rounded-lg transition-all duration-150"
+                              title="查看"
+                            >
+                              <Eye size={16} />
+                            </button>
+                          )}
                           {canUpdateUser && (
                             <button
                               onClick={() => handleEditClick(user)}
@@ -699,6 +719,19 @@ export default function Home() {
           isOpen={importHistoryModalOpen}
           onClose={() => setImportHistoryModalOpen(false)}
           showToast={showToast}
+        />
+
+        <UserDetailModal
+          isOpen={detailModalOpen}
+          onClose={() => {
+            setDetailModalOpen(false);
+            setViewingUserId(null);
+          }}
+          userId={viewingUserId}
+          onEdit={(user) => {
+            setEditingUser(user);
+            setFormOpen(true);
+          }}
         />
       </div>
     </div>

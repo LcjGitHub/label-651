@@ -202,6 +202,11 @@ export interface ExportQuery {
   ids?: number[];
 }
 
+export interface UserDetail {
+  user: User;
+  operationLogs: OperationLog[];
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;

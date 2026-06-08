@@ -2,6 +2,7 @@ import {
   User,
   UserCreate,
   UserUpdate,
+  UserDetail,
   Role,
   RoleCreate,
   RoleUpdate,
@@ -126,6 +127,10 @@ export const userApi = {
 
   getUser: async (id: number): Promise<ApiResponse<User>> => {
     return handleRequest<ApiResponse<User>>(`${API_BASE_URL}/users/${id}`);
+  },
+
+  getUserDetail: async (id: number): Promise<ApiResponse<UserDetail>> => {
+    return handleRequest<ApiResponse<UserDetail>>(`${API_BASE_URL}/users/${id}/detail`);
   },
 
   createUser: async (user: UserCreate): Promise<ApiResponse<User>> => {
