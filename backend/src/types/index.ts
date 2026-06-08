@@ -239,6 +239,21 @@ export interface ExportTemplateUpdate {
   fields?: string[];
 }
 
+export interface SearchHistory {
+  id: number;
+  user_id: number;
+  module: string;
+  keyword: string;
+  filters: string;
+  created_at: string;
+}
+
+export interface SearchHistoryCreate {
+  module?: string;
+  keyword?: string;
+  filters?: Record<string, unknown>;
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;

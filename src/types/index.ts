@@ -238,3 +238,12 @@ export interface ExportField {
   key: string;
   label: string;
 }
+
+export interface SearchHistory {
+  id: number;
+  user_id: number;
+  module: string;
+  keyword: string;
+  filters: Record<string, unknown>;
+  created_at: string;
+}

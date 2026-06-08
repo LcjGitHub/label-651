@@ -21,6 +21,7 @@ import {
   BatchOperationResult,
   ExportTemplate,
   ExportField,
+  SearchHistory,
 } from '@/types';
 
 const API_BASE_URL = '/api';
@@ -322,6 +323,29 @@ export const userApi = {
     return handleRequest<ApiResponse<BatchOperationResult>>(`${API_BASE_URL}/users/batch`, {
       method: 'POST',
       body: JSON.stringify({ action, ids }),
+    });
+  },
+
+  getSearchHistory: async (module: string = 'users'): Promise<ApiResponse<SearchHistory[]>> => {
+    return handleRequest<ApiResponse<SearchHistory[]>>(`${API_BASE_URL}/users/search-history?module=${encodeURIComponent(module)}`);
+  },
+
+  saveSearchHistory: async (data: { module?: string; keyword?: string; filters?: Record<string, unknown> }): Promise<ApiResponse> => {
+    return handleRequest<ApiResponse>(`${API_BASE_URL}/users/search-history`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteSearchHistory: async (id: number): Promise<ApiResponse> => {
+    return handleRequest<ApiResponse>(`${API_BASE_URL}/users/search-history/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  clearSearchHistory: async (module: string = 'users'): Promise<ApiResponse> => {
+    return handleRequest<ApiResponse>(`${API_BASE_URL}/users/search-history?module=${encodeURIComponent(module)}`, {
+      method: 'DELETE',
     });
   },
 };

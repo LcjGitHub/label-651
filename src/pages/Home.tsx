@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Plus, Edit2, Trash2, Loader2, Shield, Upload, History, Users, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, CheckCircle2, XCircle, X } from 'lucide-react';
-import { User, Toast as ToastType } from '@/types';
+import { User, Toast as ToastType, SearchHistory } from '@/types';
 import { userApi } from '@/services/api';
 import SearchBar, { FilterTag } from '@/components/SearchBar';
 import AdvancedFilter, { AdvancedFilterValue } from '@/components/AdvancedFilter';
@@ -69,6 +69,8 @@ export default function Home() {
   const [toasts, setToasts] = useState<ToastType[]>([]);
   const location = useLocation();
 
+  const [searchHistory, setSearchHistory] = useState<SearchHistory[]>([]);
+
   const isInitialLoadRef = useRef(true);
   const queryParamsRef = useRef({
     search: '',
@@ -129,6 +131,86 @@ export default function Home() {
       isInitialLoadRef.current = false;
     }
   }, []);
+
+  const fetchSearchHistory = useCallback(async () => {
+    try {
+      const response = await userApi.getSearchHistory('users');
+      if (response.success && response.data) {
+        setSearchHistory(response.data);
+      }
+    } catch (err) {
+      console.error('获取搜索历史失败:', err);
+    }
+  }, []);
+
+  const handleApplyHistory = useCallback(
+    (item: SearchHistory) => {
+      queryParamsRef.current.search = item.keyword || '';
+      queryParamsRef.current.page = 1;
+      setSearchQuery(item.keyword || '');
+      setPage(1);
+
+      const filters = item.filters;
+      const newFilter: AdvancedFilterValue = {
+        statuses: [],
+        dateRange: { start: '', end: '' },
+        phonePrefix: '',
+      };
+
+      if (filters) {
+        if (Array.isArray(filters.statuses)) {
+          newFilter.statuses = filters.statuses as string[];
+          queryParamsRef.current.statuses = filters.statuses as string[];
+        }
+        if (typeof filters.created_at_start === 'string') {
+          newFilter.dateRange.start = filters.created_at_start;
+          queryParamsRef.current.created_at_start = filters.created_at_start;
+        }
+        if (typeof filters.created_at_end === 'string') {
+          newFilter.dateRange.end = filters.created_at_end;
+          queryParamsRef.current.created_at_end = filters.created_at_end;
+        }
+        if (typeof filters.phone_prefix === 'string') {
+          newFilter.phonePrefix = filters.phone_prefix;
+          queryParamsRef.current.phone_prefix = filters.phone_prefix;
+        }
+      }
+
+      setAdvancedFilter(newFilter);
+      fetchUsers();
+      fetchSearchHistory();
+    },
+    [fetchUsers, fetchSearchHistory]
+  );
+
+  const handleDeleteHistory = useCallback(
+    async (id: number) => {
+      try {
+        const response = await userApi.deleteSearchHistory(id);
+        if (response.success) {
+          setSearchHistory((prev) => prev.filter((h) => h.id !== id));
+          showToast('success', '已删除搜索历史');
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '删除失败';
+        showToast('error', message);
+      }
+    },
+    [showToast]
+  );
+
+  const handleClearHistory = useCallback(async () => {
+    try {
+      const response = await userApi.clearSearchHistory('users');
+      if (response.success) {
+        setSearchHistory([]);
+        showToast('success', '已清空全部搜索历史');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '清空失败';
+      showToast('error', message);
+    }
+  }, [showToast]);
 
   const activeFilters = useMemo<FilterTag[]>(() => {
     const tags: FilterTag[] = [];
@@ -231,7 +313,8 @@ export default function Home() {
 
   useEffect(() => {
     fetchUsers();
-  }, [fetchUsers]);
+    fetchSearchHistory();
+  }, [fetchUsers, fetchSearchHistory]);
 
   useEffect(() => {
     const state = location.state as { message?: string } | null;
@@ -251,8 +334,9 @@ export default function Home() {
       setPage(1);
       setFilterOpen(false);
       fetchUsers();
+      fetchSearchHistory();
     },
-    [fetchUsers]
+    [fetchUsers, fetchSearchHistory]
   );
 
   const handleRemoveFilter = useCallback(
@@ -276,8 +360,9 @@ export default function Home() {
       queryParamsRef.current.page = 1;
       setPage(1);
       fetchUsers();
+      fetchSearchHistory();
     },
-    [advancedFilter, fetchUsers]
+    [advancedFilter, fetchUsers, fetchSearchHistory]
   );
 
   const handleClearAllFilters = useCallback(() => {
@@ -294,7 +379,8 @@ export default function Home() {
     queryParamsRef.current.page = 1;
     setPage(1);
     fetchUsers();
-  }, [fetchUsers]);
+    fetchSearchHistory();
+  }, [fetchUsers, fetchSearchHistory]);
 
   const handleSearch = useCallback(
     (query: string) => {
@@ -303,8 +389,9 @@ export default function Home() {
       setSearchQuery(query);
       setPage(1);
       fetchUsers();
+      fetchSearchHistory();
     },
-    [fetchUsers]
+    [fetchUsers, fetchSearchHistory]
   );
 
   const handleAddClick = () => {
@@ -572,6 +659,10 @@ export default function Home() {
               activeFilters={activeFilters}
               onRemoveFilter={handleRemoveFilter}
               onClearAllFilters={handleClearAllFilters}
+              searchHistory={searchHistory}
+              onApplyHistory={handleApplyHistory}
+              onDeleteHistory={handleDeleteHistory}
+              onClearHistory={handleClearHistory}
             />
           </div>
           <AdvancedFilter

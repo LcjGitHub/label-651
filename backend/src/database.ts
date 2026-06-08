@@ -310,6 +310,20 @@ class DatabaseConnectionPool {
       CREATE INDEX IF NOT EXISTS idx_export_templates_user ON export_templates(user_id);
       CREATE INDEX IF NOT EXISTS idx_export_templates_module ON export_templates(module);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_export_templates_user_module_name ON export_templates(user_id, module, name);
+
+      CREATE TABLE IF NOT EXISTS search_histories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        module VARCHAR(50) NOT NULL DEFAULT 'users',
+        keyword VARCHAR(500) NOT NULL DEFAULT '',
+        filters TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_search_histories_user ON search_histories(user_id);
+      CREATE INDEX IF NOT EXISTS idx_search_histories_module ON search_histories(module);
+      CREATE INDEX IF NOT EXISTS idx_search_histories_created ON search_histories(created_at);
     `);
 
     const count = this.initDb.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number };

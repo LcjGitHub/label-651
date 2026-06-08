@@ -1,11 +1,42 @@
-import { Search, X, Filter, XCircle } from 'lucide-react';
+import { Search, X, Filter, XCircle, Clock, Trash2 } from 'lucide-react';
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { SearchHistory } from '@/types';
 
 export interface FilterTag {
   key: string;
   label: string;
   value: string;
 }
+
+export interface HistoryFilters {
+  statuses?: string[];
+  created_at_start?: string;
+  created_at_end?: string;
+  phone_prefix?: string;
+}
+
+const formatHistoryLabel = (item: SearchHistory): string => {
+  const parts: string[] = [];
+  if (item.keyword && item.keyword.trim()) {
+    parts.push(item.keyword.trim());
+  }
+  const filters = item.filters as HistoryFilters;
+  if (filters) {
+    if (filters.statuses && filters.statuses.length > 0) {
+      const labels = filters.statuses.map((s) => (s === 'active' ? '启用' : '禁用'));
+      parts.push(`状态:${labels.join('/')}`);
+    }
+    if (filters.created_at_start || filters.created_at_end) {
+      const start = filters.created_at_start || '不限';
+      const end = filters.created_at_end || '不限';
+      parts.push(`${start}至${end}`);
+    }
+    if (filters.phone_prefix && filters.phone_prefix.trim()) {
+      parts.push(`前缀:${filters.phone_prefix}`);
+    }
+  }
+  return parts.length > 0 ? parts.join(' · ') : '(空搜索)';
+};
 
 interface SearchBarProps {
   onSearch: (query: string) => void;
@@ -15,6 +46,10 @@ interface SearchBarProps {
   activeFilters?: FilterTag[];
   onRemoveFilter?: (key: string) => void;
   onClearAllFilters?: () => void;
+  searchHistory?: SearchHistory[];
+  onApplyHistory?: (item: SearchHistory) => void;
+  onDeleteHistory?: (id: number) => void;
+  onClearHistory?: () => void;
 }
 
 export default function SearchBar({
@@ -25,9 +60,15 @@ export default function SearchBar({
   activeFilters = [],
   onRemoveFilter,
   onClearAllFilters,
+  searchHistory = [],
+  onApplyHistory,
+  onDeleteHistory,
+  onClearHistory,
 }: SearchBarProps) {
   const [value, setValue] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const debouncedSearch = useCallback(
     (query: string) => {
@@ -49,6 +90,16 @@ export default function SearchBar({
     };
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowHistory(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setValue(newValue);
@@ -60,10 +111,39 @@ export default function SearchBar({
     onSearch('');
   };
 
+  const handleFocus = () => {
+    if (searchHistory.length > 0) {
+      setShowHistory(true);
+    }
+  };
+
+  const handleApplyHistory = (item: SearchHistory) => {
+    setValue(item.keyword || '');
+    setShowHistory(false);
+    if (onApplyHistory) {
+      onApplyHistory(item);
+    }
+  };
+
+  const handleDeleteHistory = (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    if (onDeleteHistory) {
+      onDeleteHistory(id);
+    }
+  };
+
+  const handleClearAllHistory = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onClearHistory) {
+      onClearHistory();
+    }
+  };
+
   const hasActiveFilters = activeFilters.length > 0;
+  const hasHistory = searchHistory.length > 0;
 
   return (
-    <div className="w-full">
+    <div className="w-full" ref={containerRef}>
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-md">
           <div className="relative w-full">
@@ -75,6 +155,7 @@ export default function SearchBar({
               type="text"
               value={value}
               onChange={handleChange}
+              onFocus={handleFocus}
               placeholder={placeholder}
               className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg
                          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
@@ -91,6 +172,48 @@ export default function SearchBar({
               </button>
             )}
           </div>
+
+          {showHistory && hasHistory && (
+            <div className="absolute z-20 top-full mt-2 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-100">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                  <Clock size={12} />
+                  搜索历史
+                </span>
+                {onClearHistory && (
+                  <button
+                    onClick={handleClearAllHistory}
+                    className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 transition-colors"
+                  >
+                    <Trash2 size={12} />
+                    清空全部
+                  </button>
+                )}
+              </div>
+              <div className="max-h-64 overflow-y-auto py-1">
+                {searchHistory.map((item) => (
+                  <div
+                    key={item.id}
+                    className="group flex items-center justify-between px-3 py-2 hover:bg-blue-50 cursor-pointer transition-colors"
+                    onClick={() => handleApplyHistory(item)}
+                  >
+                    <span className="flex-1 text-sm text-gray-700 truncate pr-2">
+                      {formatHistoryLabel(item)}
+                    </span>
+                    {onDeleteHistory && (
+                      <button
+                        onClick={(e) => handleDeleteHistory(e, item.id)}
+                        className="flex-shrink-0 p-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all rounded hover:bg-red-50"
+                        aria-label="删除历史记录"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {onToggleFilter && (

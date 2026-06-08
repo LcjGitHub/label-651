@@ -7,7 +7,7 @@ import { getDb } from '../database';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest, requireAuth, requirePermission } from '../middleware/auth';
 import { upload, exportsDir, avatarUpload } from '../middleware/upload';
-import { User, UserCreate, UserUpdate, Role, ApiResponse, ImportHistory, ImportResult, UserDetail, OperationLog, BatchOperationResult, OperationLogDetail, ExportTemplate, ExportTemplateCreate, ExportTemplateUpdate } from '../types';
+import { User, UserCreate, UserUpdate, Role, ApiResponse, ImportHistory, ImportResult, UserDetail, OperationLog, BatchOperationResult, OperationLogDetail, ExportTemplate, ExportTemplateCreate, ExportTemplateUpdate, SearchHistory, SearchHistoryCreate } from '../types';
 import { getClientIp, getOperatorName, recordOperationLog } from '../services/logService';
 
 const router = Router();
@@ -125,6 +125,26 @@ router.get('/', requireAuth, requirePermission('user:list'), (req: AuthRequest, 
       total,
       filteredTotal,
     };
+
+    if (req.userId) {
+      const filters: Record<string, unknown> = {};
+      if (statusesParam && statusesParam.trim()) {
+        const statuses = statusesParam.split(',').filter(s => ['active', 'inactive'].includes(s.trim()));
+        if (statuses.length > 0) {
+          filters.statuses = statuses;
+        }
+      }
+      if (createdAtStart && createdAtStart.trim()) {
+        filters.created_at_start = createdAtStart.trim();
+      }
+      if (createdAtEnd && createdAtEnd.trim()) {
+        filters.created_at_end = createdAtEnd.trim();
+      }
+      if (phonePrefix && phonePrefix.trim()) {
+        filters.phone_prefix = phonePrefix.trim();
+      }
+      saveSearchHistory(req.userId, search || '', filters, 'users');
+    }
 
     res.json(response);
   } catch (err) {
@@ -1373,6 +1393,198 @@ router.post('/:id/avatar', requireAuth, requirePermission('user:update'),
         user: updatedUser,
       },
       message: '头像上传成功',
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const MAX_SEARCH_HISTORY = 10;
+
+const saveSearchHistory = (
+  userId: number,
+  keyword: string,
+  filters: Record<string, unknown>,
+  module: string = 'users'
+) => {
+  try {
+    const db = getDb();
+    const filtersJson = Object.keys(filters).length > 0 ? JSON.stringify(filters) : null;
+
+    if ((!keyword || !keyword.trim()) && !filtersJson) {
+      return;
+    }
+
+    const cleanKeyword = (keyword || '').trim();
+
+    const existing = db
+      .prepare(
+        `SELECT id FROM search_histories 
+         WHERE user_id = ? AND module = ? AND keyword = ? AND COALESCE(filters, '') = COALESCE(?, '')`
+      )
+      .get(userId, module, cleanKeyword, filtersJson || '') as { id: number } | undefined;
+
+    if (existing) {
+      db.prepare(
+        `UPDATE search_histories SET created_at = CURRENT_TIMESTAMP WHERE id = ?`
+      ).run(existing.id);
+      return;
+    }
+
+    db.prepare(
+      `INSERT INTO search_histories (user_id, module, keyword, filters)
+       VALUES (?, ?, ?, ?)`
+    ).run(userId, module, cleanKeyword, filtersJson);
+
+    const countRow = db
+      .prepare(`SELECT COUNT(*) as cnt FROM search_histories WHERE user_id = ? AND module = ?`)
+      .get(userId, module) as { cnt: number };
+
+    if (countRow.cnt > MAX_SEARCH_HISTORY) {
+      const toDelete = db
+        .prepare(
+          `SELECT id FROM search_histories 
+           WHERE user_id = ? AND module = ? 
+           ORDER BY created_at DESC 
+           LIMIT -1 OFFSET ?`
+        )
+        .all(userId, module, MAX_SEARCH_HISTORY) as { id: number }[];
+
+      if (toDelete.length > 0) {
+        const deleteStmt = db.prepare(`DELETE FROM search_histories WHERE id = ?`);
+        db.exec('BEGIN TRANSACTION');
+        try {
+          for (const row of toDelete) {
+            deleteStmt.run(row.id);
+          }
+          db.exec('COMMIT');
+        } catch {
+          db.exec('ROLLBACK');
+        }
+      }
+    }
+  } catch (err) {
+    console.error('保存搜索历史失败:', err);
+  }
+};
+
+router.get('/search-history', requireAuth, (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.userId) {
+      throw new AppError('未授权，请先登录', 401);
+    }
+
+    const db = getDb();
+    const module = (req.query.module as string) || 'users';
+
+    const histories = db
+      .prepare(
+        `SELECT * FROM search_histories 
+         WHERE user_id = ? AND module = ? 
+         ORDER BY created_at DESC 
+         LIMIT ?`
+      )
+      .all(req.userId, module, MAX_SEARCH_HISTORY) as unknown as SearchHistory[];
+
+    const parsedHistories = histories.map((h) => ({
+      ...h,
+      filters: h.filters ? JSON.parse(h.filters) : {},
+    }));
+
+    const response: ApiResponse<Array<Omit<SearchHistory, 'filters'> & { filters: Record<string, unknown> }>> = {
+      success: true,
+      data: parsedHistories,
+      total: parsedHistories.length,
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/search-history', requireAuth, (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.userId) {
+      throw new AppError('未授权，请先登录', 401);
+    }
+
+    const { module, keyword, filters } = req.body as SearchHistoryCreate;
+
+    saveSearchHistory(
+      req.userId,
+      keyword || '',
+      filters || {},
+      module || 'users'
+    );
+
+    const response: ApiResponse = {
+      success: true,
+      message: '搜索历史保存成功',
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/search-history/:id', requireAuth, (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.userId) {
+      throw new AppError('未授权，请先登录', 401);
+    }
+
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      throw new AppError('无效的历史记录ID', 400);
+    }
+
+    const db = getDb();
+
+    const existing = db
+      .prepare('SELECT * FROM search_histories WHERE id = ?')
+      .get(id) as unknown as SearchHistory | undefined;
+
+    if (!existing) {
+      throw new AppError('历史记录不存在', 404);
+    }
+
+    if (existing.user_id !== req.userId) {
+      throw new AppError('无权限删除此记录', 403);
+    }
+
+    db.prepare('DELETE FROM search_histories WHERE id = ?').run(id);
+
+    const response: ApiResponse = {
+      success: true,
+      message: '删除成功',
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/search-history', requireAuth, (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.userId) {
+      throw new AppError('未授权，请先登录', 401);
+    }
+
+    const db = getDb();
+    const module = (req.query.module as string) || 'users';
+
+    db.prepare(
+      'DELETE FROM search_histories WHERE user_id = ? AND module = ?'
+    ).run(req.userId, module);
+
+    const response: ApiResponse = {
+      success: true,
+      message: '已清空全部搜索历史',
     };
 
     res.json(response);
