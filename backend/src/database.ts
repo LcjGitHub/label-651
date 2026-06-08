@@ -11,7 +11,7 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const dbPath = path.join(dataDir, 'users.db');
+const dbPath = process.env.TEST_DB_PATH || path.join(dataDir, 'users.db');
 
 const SLOW_QUERY_THRESHOLD_MS = 100;
 const DEFAULT_POOL_SIZE = 5;

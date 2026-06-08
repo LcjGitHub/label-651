@@ -148,7 +148,7 @@ router.post('/batch', requireAuth, (req: AuthRequest, res: Response, next: NextF
     }
 
     const needPermission = action === 'delete' ? 'user:delete' : 'user:update';
-    const hasPerm = (req as any).permissions?.includes(needPermission);
+    const hasPerm = req.userPermissions?.includes(needPermission);
     if (!hasPerm) {
       throw new AppError('无权限执行此操作', 403);
     }
