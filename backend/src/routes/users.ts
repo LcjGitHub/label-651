@@ -121,6 +121,20 @@ router.get('/:id', requireAuth, requirePermission('user:view'), (req: AuthReques
   }
 });
 
+const logDetailContainsUserId = (detail: string, userId: number): boolean => {
+  try {
+    const parsed = JSON.parse(detail) as {
+      before?: { id?: number };
+      after?: { id?: number };
+    };
+    if (parsed.before && parsed.before.id === userId) return true;
+    if (parsed.after && parsed.after.id === userId) return true;
+    return false;
+  } catch {
+    return false;
+  }
+};
+
 router.get('/:id/detail', requireAuth, requirePermission('user:view'), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
@@ -139,14 +153,18 @@ router.get('/:id/detail', requireAuth, requirePermission('user:view'), (req: Aut
 
     user.roles = getUserRoles(db, id);
 
-    const logs = db
+    const candidateLogs = db
       .prepare(
         `SELECT * FROM operation_logs 
-         WHERE operator_id = ? 
+         WHERE module = '用户管理' 
          ORDER BY created_at DESC 
-         LIMIT 10`
+         LIMIT 100`
       )
-      .all(id) as unknown as OperationLog[];
+      .all() as unknown as OperationLog[];
+
+    const logs = candidateLogs
+      .filter((log) => logDetailContainsUserId(log.detail, id))
+      .slice(0, 10);
 
     const detail: UserDetail = {
       user,

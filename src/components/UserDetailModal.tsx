@@ -8,6 +8,7 @@ interface UserDetailModalProps {
   onClose: () => void;
   userId: number | null;
   onEdit: (user: User) => void;
+  canEdit?: boolean;
 }
 
 const getOperationTypeLabel = (type: OperationType): { label: string; className: string } => {
@@ -34,7 +35,7 @@ const formatDate = (dateStr: string) => {
   });
 };
 
-export default function UserDetailModal({ isOpen, onClose, userId, onEdit }: UserDetailModalProps) {
+export default function UserDetailModal({ isOpen, onClose, userId, onEdit, canEdit = false }: UserDetailModalProps) {
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<UserDetailType | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,14 +147,16 @@ export default function UserDetailModal({ isOpen, onClose, userId, onEdit }: Use
               <div className="mb-8">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">基本信息</h3>
-                  <button
-                    onClick={handleEditClick}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600
-                               rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
-                  >
-                    <Edit2 size={14} />
-                    编辑
-                  </button>
+                  {canEdit && (
+                    <button
+                      onClick={handleEditClick}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600
+                                 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+                    >
+                      <Edit2 size={14} />
+                      编辑
+                    </button>
+                  )}
                 </div>
 
                 <div className="bg-gray-50 rounded-xl p-5">
@@ -203,20 +206,34 @@ export default function UserDetailModal({ isOpen, onClose, userId, onEdit }: Use
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="bg-white rounded-lg p-4 border border-gray-100">
                       <p className="text-xs text-gray-500 mb-1">用户 ID</p>
                       <p className="text-sm font-medium text-gray-900">{detail.user.id}</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-4 border border-gray-100">
+                      <p className="text-xs text-gray-500 mb-1">姓名</p>
+                      <p className="text-sm font-medium text-gray-900">{detail.user.name}</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-4 border border-gray-100">
+                      <p className="text-xs text-gray-500 mb-1">邮箱</p>
+                      <p className="text-sm font-medium text-gray-900 break-all">{detail.user.email}</p>
                     </div>
                     <div className="bg-white rounded-lg p-4 border border-gray-100">
                       <p className="text-xs text-gray-500 mb-1">手机号</p>
                       <p className="text-sm font-medium text-gray-900">{detail.user.phone || '-'}</p>
                     </div>
                     <div className="bg-white rounded-lg p-4 border border-gray-100">
+                      <p className="text-xs text-gray-500 mb-1">状态</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        {detail.user.status === 'active' ? '启用' : '禁用'}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg p-4 border border-gray-100">
                       <p className="text-xs text-gray-500 mb-1">创建时间</p>
                       <p className="text-sm font-medium text-gray-900">{formatDate(detail.user.created_at)}</p>
                     </div>
-                    <div className="bg-white rounded-lg p-4 border border-gray-100">
+                    <div className="bg-white rounded-lg p-4 border border-gray-100 lg:col-span-2">
                       <p className="text-xs text-gray-500 mb-1">更新时间</p>
                       <p className="text-sm font-medium text-gray-900">{formatDate(detail.user.updated_at)}</p>
                     </div>

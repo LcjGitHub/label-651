@@ -732,6 +732,7 @@ export default function Home() {
             setEditingUser(user);
             setFormOpen(true);
           }}
+          canEdit={canUpdateUser}
         />
       </div>
     </div>
