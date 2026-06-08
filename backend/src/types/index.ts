@@ -210,6 +210,14 @@ export interface UserDetail {
   operationLogs: OperationLog[];
 }
 
+export interface BatchOperationResult {
+  total: number;
+  success: number;
+  fail: number;
+  failIds?: number[];
+  failReasons?: { id: number; reason: string }[];
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;

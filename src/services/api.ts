@@ -18,6 +18,7 @@ import {
   Message,
   MessageCreate,
   MessageQuery,
+  BatchOperationResult,
 } from '@/types';
 
 const API_BASE_URL = '/api';
@@ -283,6 +284,27 @@ export const userApi = {
       };
 
       xhr.send(formData);
+    });
+  },
+
+  batchDeleteUsers: async (ids: number[]): Promise<ApiResponse<BatchOperationResult>> => {
+    return handleRequest<ApiResponse<BatchOperationResult>>(`${API_BASE_URL}/users/batch/delete`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+  },
+
+  batchEnableUsers: async (ids: number[]): Promise<ApiResponse<BatchOperationResult>> => {
+    return handleRequest<ApiResponse<BatchOperationResult>>(`${API_BASE_URL}/users/batch/enable`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+  },
+
+  batchDisableUsers: async (ids: number[]): Promise<ApiResponse<BatchOperationResult>> => {
+    return handleRequest<ApiResponse<BatchOperationResult>>(`${API_BASE_URL}/users/batch/disable`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
     });
   },
 };

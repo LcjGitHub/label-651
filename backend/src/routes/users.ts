@@ -7,7 +7,7 @@ import { getDb } from '../database';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest, requireAuth, requirePermission } from '../middleware/auth';
 import { upload, exportsDir, avatarUpload } from '../middleware/upload';
-import { User, UserCreate, UserUpdate, Role, ApiResponse, ImportHistory, ImportResult, UserDetail, OperationLog } from '../types';
+import { User, UserCreate, UserUpdate, Role, ApiResponse, ImportHistory, ImportResult, UserDetail, OperationLog, BatchOperationResult } from '../types';
 
 const router = Router();
 
@@ -924,6 +924,255 @@ router.post('/:id/avatar', requireAuth, requirePermission('user:update'),
         user: updatedUser,
       },
       message: '头像上传成功',
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/batch/delete', requireAuth, requirePermission('user:delete'),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+    const { ids } = req.body as { ids: number[] };
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new AppError('请选择要删除的用户', 400);
+    }
+
+    const parsedIds = ids.map((id) => parseInt(String(id))).filter((id) => !isNaN(id));
+    const uniqueIds: number[] = [];
+    const seen = new Set<number>();
+    for (const id of parsedIds) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        uniqueIds.push(id);
+      }
+    }
+    if (uniqueIds.length === 0) {
+      throw new AppError('用户ID格式不正确', 400);
+    }
+
+    const successIds: number[] = [];
+    const failReasons: { id: number; reason: string }[] = [];
+
+    db.exec('BEGIN TRANSACTION');
+    try {
+      const deleteUserRoles = db.prepare('DELETE FROM user_roles WHERE user_id = ?');
+      const deleteUser = db.prepare('DELETE FROM users WHERE id = ?');
+
+      for (const id of uniqueIds) {
+        try {
+          const existingUser = db
+            .prepare('SELECT * FROM users WHERE id = ?')
+            .get(id) as unknown as User | undefined;
+
+          if (!existingUser) {
+            failReasons.push({ id, reason: '用户不存在' });
+            continue;
+          }
+
+          deleteUserRoles.run(id);
+          const result = deleteUser.run(id);
+          if (result.changes > 0) {
+            successIds.push(id);
+          } else {
+            failReasons.push({ id, reason: '删除失败' });
+          }
+        } catch (innerErr) {
+          failReasons.push({
+            id,
+            reason: innerErr instanceof Error ? innerErr.message : '删除失败',
+          });
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+
+    const result: BatchOperationResult = {
+      total: uniqueIds.length,
+      success: successIds.length,
+      fail: failReasons.length,
+      failIds: failReasons.map((f) => f.id),
+      failReasons,
+    };
+
+    const response: ApiResponse<BatchOperationResult> = {
+      success: true,
+      data: result,
+      message: `批量删除完成：成功${successIds.length}条，失败${failReasons.length}条`,
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/batch/enable', requireAuth, requirePermission('user:update'),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+    const { ids } = req.body as { ids: number[] };
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new AppError('请选择要启用的用户', 400);
+    }
+
+    const parsedIds = ids.map((id) => parseInt(String(id))).filter((id) => !isNaN(id));
+    const uniqueIds: number[] = [];
+    const seen = new Set<number>();
+    for (const id of parsedIds) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        uniqueIds.push(id);
+      }
+    }
+    if (uniqueIds.length === 0) {
+      throw new AppError('用户ID格式不正确', 400);
+    }
+
+    const successIds: number[] = [];
+    const failReasons: { id: number; reason: string }[] = [];
+
+    db.exec('BEGIN TRANSACTION');
+    try {
+      const updateStmt = db.prepare(
+        "UPDATE users SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+      );
+
+      for (const id of uniqueIds) {
+        try {
+          const existingUser = db
+            .prepare('SELECT * FROM users WHERE id = ?')
+            .get(id) as unknown as User | undefined;
+
+          if (!existingUser) {
+            failReasons.push({ id, reason: '用户不存在' });
+            continue;
+          }
+
+          const result = updateStmt.run(id);
+          if (result.changes > 0) {
+            successIds.push(id);
+          } else {
+            failReasons.push({ id, reason: '启用失败' });
+          }
+        } catch (innerErr) {
+          failReasons.push({
+            id,
+            reason: innerErr instanceof Error ? innerErr.message : '启用失败',
+          });
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+
+    const result: BatchOperationResult = {
+      total: uniqueIds.length,
+      success: successIds.length,
+      fail: failReasons.length,
+      failIds: failReasons.map((f) => f.id),
+      failReasons,
+    };
+
+    const response: ApiResponse<BatchOperationResult> = {
+      success: true,
+      data: result,
+      message: `批量启用完成：成功${successIds.length}条，失败${failReasons.length}条`,
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/batch/disable', requireAuth, requirePermission('user:update'),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+    const { ids } = req.body as { ids: number[] };
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new AppError('请选择要禁用的用户', 400);
+    }
+
+    const parsedIds = ids.map((id) => parseInt(String(id))).filter((id) => !isNaN(id));
+    const uniqueIds: number[] = [];
+    const seen = new Set<number>();
+    for (const id of parsedIds) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        uniqueIds.push(id);
+      }
+    }
+    if (uniqueIds.length === 0) {
+      throw new AppError('用户ID格式不正确', 400);
+    }
+
+    const successIds: number[] = [];
+    const failReasons: { id: number; reason: string }[] = [];
+
+    db.exec('BEGIN TRANSACTION');
+    try {
+      const updateStmt = db.prepare(
+        "UPDATE users SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+      );
+
+      for (const id of uniqueIds) {
+        try {
+          const existingUser = db
+            .prepare('SELECT * FROM users WHERE id = ?')
+            .get(id) as unknown as User | undefined;
+
+          if (!existingUser) {
+            failReasons.push({ id, reason: '用户不存在' });
+            continue;
+          }
+
+          const result = updateStmt.run(id);
+          if (result.changes > 0) {
+            successIds.push(id);
+          } else {
+            failReasons.push({ id, reason: '禁用失败' });
+          }
+        } catch (innerErr) {
+          failReasons.push({
+            id,
+            reason: innerErr instanceof Error ? innerErr.message : '禁用失败',
+          });
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+
+    const result: BatchOperationResult = {
+      total: uniqueIds.length,
+      success: successIds.length,
+      fail: failReasons.length,
+      failIds: failReasons.map((f) => f.id),
+      failReasons,
+    };
+
+    const response: ApiResponse<BatchOperationResult> = {
+      success: true,
+      data: result,
+      message: `批量禁用完成：成功${successIds.length}条，失败${failReasons.length}条`,
     };
 
     res.json(response);
