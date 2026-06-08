@@ -463,4 +463,102 @@ router.delete('/:id', requireAuth, requirePermission('role:delete'),
   }
 });
 
+router.post('/:id/copy', requireAuth, requirePermission('role:create'),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+    const sourceId = parseInt(req.params.id);
+    if (isNaN(sourceId)) {
+      throw new AppError('无效的源角色ID', 400);
+    }
+
+    const sourceRole = db
+      .prepare('SELECT * FROM roles WHERE id = ?')
+      .get(sourceId) as unknown as Role;
+
+    if (!sourceRole) {
+      throw new AppError('源角色不存在', 404);
+    }
+
+    const { name, code } = req.body as { name?: string; code?: string };
+
+    let newName = name;
+    if (!newName || !newName.trim()) {
+      newName = `${sourceRole.name}副本`;
+    }
+    newName = newName.trim();
+
+    let newCode = code;
+    if (!newCode || !newCode.trim()) {
+      newCode = `${sourceRole.code}_copy`;
+    }
+    newCode = newCode.trim();
+
+    const existingName = db
+      .prepare('SELECT id FROM roles WHERE name = ?')
+      .get(newName) as { id: number } | undefined;
+    if (existingName) {
+      throw new AppError(`角色名称「${newName}」已存在`, 400);
+    }
+
+    const existingCode = db
+      .prepare('SELECT id FROM roles WHERE code = ?')
+      .get(newCode) as { id: number } | undefined;
+    if (existingCode) {
+      throw new AppError(`角色编码「${newCode}」已存在`, 400);
+    }
+
+    const permissions = getRolePermissions(db, sourceId);
+    const permissionIds = permissions.map((p) => p.id);
+
+    let newRoleId: number | null = null;
+
+    db.exec('BEGIN TRANSACTION');
+    try {
+      const result = db
+        .prepare(
+          'INSERT INTO roles (name, code, description, status) VALUES (?, ?, ?, ?)'
+        )
+        .run(
+          newName,
+          newCode,
+          sourceRole.description || '',
+          sourceRole.status || 'active'
+        );
+
+      newRoleId = result.lastInsertRowid as number;
+
+      if (permissionIds.length > 0) {
+        const insertPerm = db.prepare(
+          'INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)'
+        );
+        for (const permId of permissionIds) {
+          insertPerm.run(newRoleId, permId);
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+
+    const newRole = db
+      .prepare('SELECT * FROM roles WHERE id = ?')
+      .get(newRoleId) as unknown as Role;
+    newRole.user_count = 0;
+    newRole.permission_count = permissionIds.length;
+
+    const response: ApiResponse<Role> = {
+      success: true,
+      data: newRole,
+      message: '角色复制成功',
+    };
+
+    res.status(201).json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

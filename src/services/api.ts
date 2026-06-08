@@ -406,6 +406,16 @@ export const roleApi = {
       method: 'DELETE',
     });
   },
+
+  copyRole: async (
+    id: number,
+    data?: { name?: string; code?: string }
+  ): Promise<ApiResponse<Role>> => {
+    return handleRequest<ApiResponse<Role>>(`${API_BASE_URL}/roles/${id}/copy`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    });
+  },
 };
 
 export const permissionApi = {

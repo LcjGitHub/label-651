@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Shield, Loader2, Key, Users } from 'lucide-react';
+import { Plus, Edit2, Trash2, Shield, Loader2, Key, Users, Copy } from 'lucide-react';
 import { Role, RoleCreate, RoleUpdate, Toast as ToastType, Permission } from '@/types';
 import { roleApi, permissionApi } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
@@ -26,6 +26,7 @@ export default function Roles() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [copyingRole, setCopyingRole] = useState<Role | null>(null);
   const [formLoading, setFormLoading] = useState(false);
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -80,11 +81,19 @@ export default function Roles() {
 
   const handleAddClick = () => {
     setEditingRole(null);
+    setCopyingRole(null);
     setFormOpen(true);
   };
 
   const handleEditClick = (role: Role) => {
     setEditingRole(role);
+    setCopyingRole(null);
+    setFormOpen(true);
+  };
+
+  const handleCopyClick = (role: Role) => {
+    setCopyingRole(role);
+    setEditingRole(null);
     setFormOpen(true);
   };
 
@@ -126,13 +135,15 @@ export default function Roles() {
         if (response.success) {
           showToast('success', response.message || '角色更新成功');
           setFormOpen(false);
+          setEditingRole(null);
           fetchRoles(searchQuery);
         }
       } else {
         const response = await roleApi.createRole(data as RoleCreate);
         if (response.success) {
-          showToast('success', response.message || '角色创建成功');
+          showToast('success', response.message || (copyingRole ? '角色复制成功' : '角色创建成功'));
           setFormOpen(false);
+          setCopyingRole(null);
           fetchRoles(searchQuery);
         }
       }
@@ -350,6 +361,16 @@ export default function Roles() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {canCreateRole && (
+                            <button
+                              onClick={() => handleCopyClick(role)}
+                              className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50
+                                         rounded-lg transition-all duration-150"
+                              title="复制角色"
+                            >
+                              <Copy size={16} />
+                            </button>
+                          )}
                           {canAssignRole && (
                             <button
                               onClick={() => handlePermClick(role)}
@@ -392,9 +413,14 @@ export default function Roles() {
 
         <RoleForm
           isOpen={formOpen}
-          onClose={() => setFormOpen(false)}
+          onClose={() => {
+            setFormOpen(false);
+            setEditingRole(null);
+            setCopyingRole(null);
+          }}
           onSubmit={handleFormSubmit}
           role={editingRole}
+          copyFromRole={copyingRole}
           isLoading={formLoading}
         />
 

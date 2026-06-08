@@ -9,6 +9,7 @@ interface RoleFormProps {
   onClose: () => void;
   onSubmit: (data: RoleCreate | RoleUpdate) => Promise<void>;
   role?: Role | null;
+  copyFromRole?: Role | null;
   isLoading?: boolean;
 }
 
@@ -22,6 +23,7 @@ export default function RoleForm({
   onClose,
   onSubmit,
   role,
+  copyFromRole,
   isLoading = false,
 }: RoleFormProps) {
   const [formData, setFormData] = useState<RoleCreate>({
@@ -75,6 +77,23 @@ export default function RoleForm({
         } catch (err) {
           console.error('加载角色权限失败:', err);
         }
+      } else if (copyFromRole && isOpen) {
+        setFormData({
+          name: `${copyFromRole.name}副本`,
+          code: `${copyFromRole.code}_copy`,
+          description: copyFromRole.description,
+          status: copyFromRole.status,
+          permission_ids: [],
+        });
+
+        try {
+          const response = await roleApi.getRolePermissions(copyFromRole.id);
+          if (response.success && response.data) {
+            setSelectedPermissionIds(response.data.permission_ids);
+          }
+        } catch (err) {
+          console.error('加载角色权限失败:', err);
+        }
       } else {
         setFormData({
           name: '',
@@ -89,7 +108,7 @@ export default function RoleForm({
     };
 
     loadRoleData();
-  }, [role, isOpen]);
+  }, [role, copyFromRole, isOpen]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -154,6 +173,8 @@ export default function RoleForm({
   if (!isOpen) return null;
 
   const isEditing = !!role;
+  const isCopying = !!copyFromRole;
+  const formTitle = isEditing ? '编辑角色' : isCopying ? '复制角色' : '新增角色';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -169,7 +190,7 @@ export default function RoleForm({
       >
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">
-            {isEditing ? '编辑角色' : '新增角色'}
+            {formTitle}
           </h2>
           <button
             onClick={onClose}
@@ -304,7 +325,7 @@ export default function RoleForm({
                          inline-flex items-center gap-2"
             >
               {isLoading && <Loader2 size={16} className="animate-spin" />}
-              {isLoading ? '保存中...' : isEditing ? '保存' : '创建'}
+              {isLoading ? '保存中...' : isEditing ? '保存' : isCopying ? '创建副本' : '创建'}
             </button>
           </div>
         </form>
