@@ -32,30 +32,46 @@ const getUserRoles = (db: DatabaseSync, userId: number): Role[] => {
     .all(userId) as unknown as Role[];
 };
 
+const ALLOWED_SORT_FIELDS = ['name', 'email', 'created_at'];
+const ALLOWED_SORT_ORDERS = ['asc', 'desc'];
+
 router.get('/', requireAuth, requirePermission('user:list'), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
     const search = req.query.search as string;
-    let users: User[];
+
+    const pageParam = parseInt(req.query.page as string);
+    const pageSizeParam = parseInt(req.query.pageSize as string);
+    const sortBy = (req.query.sortBy as string) || 'created_at';
+    const sortOrder = (req.query.sortOrder as string) || 'desc';
+
+    const page = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
+    const pageSize = isNaN(pageSizeParam) || pageSizeParam < 1 ? 10 : [10, 20, 50, 100].includes(pageSizeParam) ? pageSizeParam : 10;
+    const validSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : 'created_at';
+    const validSortOrder = ALLOWED_SORT_ORDERS.includes(sortOrder.toLowerCase()) ? sortOrder.toUpperCase() : 'DESC';
 
     const allCount = db
       .prepare('SELECT COUNT(*) as cnt FROM users')
       .get() as { cnt: number };
     const total = allCount.cnt;
+
+    let users: User[];
     let filteredTotal = total;
 
     if (search && search.trim()) {
       const searchTerm = `%${search.trim()}%`;
-      users = db
-        .prepare(
-          'SELECT * FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC'
-        )
-        .all(searchTerm, searchTerm) as unknown as User[];
-      filteredTotal = users.length;
+      const filteredCount = db
+        .prepare('SELECT COUNT(*) as cnt FROM users WHERE name LIKE ? OR email LIKE ?')
+        .get(searchTerm, searchTerm) as { cnt: number };
+      filteredTotal = filteredCount.cnt;
+
+      const offset = (page - 1) * pageSize;
+      const sql = `SELECT * FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY ${validSortBy} ${validSortOrder} LIMIT ? OFFSET ?`;
+      users = db.prepare(sql).all(searchTerm, searchTerm, pageSize, offset) as unknown as User[];
     } else {
-      users = db
-        .prepare('SELECT * FROM users ORDER BY created_at DESC')
-        .all() as unknown as User[];
+      const offset = (page - 1) * pageSize;
+      const sql = `SELECT * FROM users ORDER BY ${validSortBy} ${validSortOrder} LIMIT ? OFFSET ?`;
+      users = db.prepare(sql).all(pageSize, offset) as unknown as User[];
     }
 
     users = users.map((user) => ({

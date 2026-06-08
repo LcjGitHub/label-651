@@ -101,11 +101,26 @@ const handleRequest = async <T>(
   }
 };
 
+export interface UserListQuery {
+  search?: string;
+  page?: number;
+  pageSize?: number;
+  sortBy?: 'name' | 'email' | 'created_at';
+  sortOrder?: 'asc' | 'desc';
+}
+
 export const userApi = {
-  getUsers: async (search?: string): Promise<ApiResponse<User[]>> => {
-    const url = search
-      ? `${API_BASE_URL}/users?search=${encodeURIComponent(search)}`
-      : `${API_BASE_URL}/users`;
+  getUsers: async (params?: UserListQuery): Promise<ApiResponse<User[]>> => {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+    const queryString = searchParams.toString();
+    const url = queryString ? `${API_BASE_URL}/users?${queryString}` : `${API_BASE_URL}/users`;
     return handleRequest<ApiResponse<User[]>>(url);
   },
 

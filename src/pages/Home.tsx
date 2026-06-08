@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Loader2, Shield, FileText, Upload, History, Users } from 'lucide-react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { Plus, Edit2, Trash2, Loader2, Shield, Upload, History, Users, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { User, UserCreate, UserUpdate, Toast as ToastType } from '@/types';
-import { userApi } from '@/services/api';
+import { userApi, UserListQuery } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
 import UserForm from '@/components/UserForm';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -13,14 +13,22 @@ import AppHeader from '@/components/AppHeader';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 
+type SortField = 'name' | 'email' | 'created_at';
+type SortOrder = 'asc' | 'desc';
+
 export default function Home() {
-  const { hasPermission, logout } = useAuthStore();
+  const { hasPermission } = useAuthStore();
   const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [filteredTotal, setFilteredTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState<SortField>('created_at');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -43,10 +51,18 @@ export default function Home() {
   const [toasts, setToasts] = useState<ToastType[]>([]);
   const location = useLocation();
 
-  const fetchUsers = useCallback(async (search?: string) => {
+  const fetchUsers = useCallback(async (params?: Partial<UserListQuery>) => {
     try {
       setLoading(true);
-      const response = await userApi.getUsers(search);
+      const queryParams: UserListQuery = {
+        search: searchQuery,
+        page,
+        pageSize,
+        sortBy,
+        sortOrder,
+        ...params,
+      };
+      const response = await userApi.getUsers(queryParams);
       if (response.success && response.data) {
         setUsers(response.data);
         const dbTotal = response.total || response.data.length;
@@ -60,7 +76,48 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [searchQuery, page, pageSize, sortBy, sortOrder]);
+
+  const totalPages = useMemo(() => {
+    const count = searchQuery && searchQuery.trim() ? filteredTotal : total;
+    return Math.max(1, Math.ceil(count / pageSize));
+  }, [filteredTotal, total, pageSize, searchQuery]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setPage(newPage);
+    }
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setPage(1);
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortBy !== field) {
+      return (
+        <span className="inline-flex flex-col ml-1 opacity-40 group-hover:opacity-70 transition-opacity">
+          <ChevronUp size={12} className="-mb-1" />
+          <ChevronDown size={12} className="-mt-1" />
+        </span>
+      );
+    }
+    return sortOrder === 'asc' ? (
+      <ChevronUp size={14} className="ml-1 text-blue-600" />
+    ) : (
+      <ChevronDown size={14} className="ml-1 text-blue-600" />
+    );
+  };
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -83,7 +140,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchUsers();
-  }, [fetchUsers]);
+  }, [fetchUsers, page, pageSize, sortBy, sortOrder]);
 
   useEffect(() => {
     const state = location.state as { message?: string } | null;
@@ -105,9 +162,9 @@ export default function Home() {
   const handleSearch = useCallback(
     (query: string) => {
       setSearchQuery(query);
-      fetchUsers(query);
+      setPage(1);
     },
-    [fetchUsers]
+    []
   );
 
   const handleAddClick = () => {
@@ -133,14 +190,14 @@ export default function Home() {
         if (response.success) {
           showToast('success', response.message || '用户更新成功');
           setFormOpen(false);
-          fetchUsers(searchQuery);
+          fetchUsers();
         }
       } else {
         const response = await userApi.createUser(data as UserCreate);
         if (response.success) {
           showToast('success', response.message || '用户创建成功');
           setFormOpen(false);
-          fetchUsers(searchQuery);
+          fetchUsers();
         }
       }
     } catch (err) {
@@ -160,7 +217,7 @@ export default function Home() {
         showToast('success', response.message || '用户删除成功');
         setDeleteModalOpen(false);
         setDeletingUser(null);
-        fetchUsers(searchQuery);
+        fetchUsers();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '删除失败';
@@ -285,8 +342,9 @@ export default function Home() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-4 text-left w-12">
@@ -304,11 +362,23 @@ export default function Home() {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       编号
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      姓名
+                    <th
+                      className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group select-none"
+                      onClick={() => handleSort('name')}
+                    >
+                      <span className="inline-flex items-center">
+                        姓名
+                        <SortIcon field="name" />
+                      </span>
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      邮箱
+                    <th
+                      className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group select-none"
+                      onClick={() => handleSort('email')}
+                    >
+                      <span className="inline-flex items-center">
+                        邮箱
+                        <SortIcon field="email" />
+                      </span>
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       手机号
@@ -319,8 +389,14 @@ export default function Home() {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       状态
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      创建时间
+                    <th
+                      className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group select-none"
+                      onClick={() => handleSort('created_at')}
+                    >
+                      <span className="inline-flex items-center">
+                        创建时间
+                        <SortIcon field="created_at" />
+                      </span>
                     </th>
                     <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       操作
@@ -435,6 +511,110 @@ export default function Home() {
                 </tbody>
               </table>
             </div>
+            {!loading && users.length > 0 && (
+              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <span>共</span>
+                  <span className="font-semibold text-gray-900">
+                    {searchQuery && searchQuery.trim() ? filteredTotal : total}
+                  </span>
+                  <span>条</span>
+                  <span className="text-gray-300 mx-2">|</span>
+                  <span>每页</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                    className="px-2 py-1 border border-gray-300 rounded-md text-sm font-medium
+                               bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500
+                               focus:border-blue-500 cursor-pointer"
+                  >
+                    {[10, 20, 50, 100].map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                  <span>条</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handlePageChange(1)}
+                    disabled={page === 1}
+                    className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-40
+                               disabled:cursor-not-allowed transition-colors"
+                    title="首页"
+                  >
+                    <ChevronsLeft size={16} />
+                  </button>
+                  <button
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page === 1}
+                    className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-40
+                               disabled:cursor-not-allowed transition-colors"
+                    title="上一页"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <div className="flex items-center gap-1 mx-2">
+                    {(() => {
+                      const pages: (number | '...')[] = [];
+                      const maxVisible = 5;
+                      const end = Math.min(totalPages, Math.max(1, page - Math.floor(maxVisible / 2)) + maxVisible - 1);
+                      const start = Math.max(1, end - maxVisible + 1);
+                      if (start > 1) {
+                        pages.push(1);
+                        if (start > 2) pages.push('...');
+                      }
+                      for (let i = start; i <= end; i++) {
+                        pages.push(i);
+                      }
+                      if (end < totalPages) {
+                        if (end < totalPages - 1) pages.push('...');
+                        pages.push(totalPages);
+                      }
+                      return pages.map((p, idx) =>
+                        p === '...' ? (
+                          <span key={`dots-${idx}`} className="px-2 text-gray-400">
+                            ...
+                          </span>
+                        ) : (
+                          <button
+                            key={p}
+                            onClick={() => handlePageChange(p)}
+                            className={`min-w-[32px] h-8 px-2 rounded-md text-sm font-medium transition-colors ${
+                              p === page
+                                ? 'bg-blue-600 text-white shadow-sm'
+                                : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        )
+                      );
+                    })()}
+                  </div>
+                  <button
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page === totalPages}
+                    className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-40
+                               disabled:cursor-not-allowed transition-colors"
+                    title="下一页"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                  <button
+                    onClick={() => handlePageChange(totalPages)}
+                    disabled={page === totalPages}
+                    className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-40
+                               disabled:cursor-not-allowed transition-colors"
+                    title="末页"
+                  >
+                    <ChevronsRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </div>
 
@@ -467,7 +647,7 @@ export default function Home() {
         <ImportModal
           isOpen={importModalOpen}
           onClose={() => setImportModalOpen(false)}
-          onSuccess={() => fetchUsers(searchQuery)}
+          onSuccess={() => fetchUsers()}
           showToast={showToast}
         />
 
