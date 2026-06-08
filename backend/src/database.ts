@@ -295,6 +295,21 @@ class DatabaseConnectionPool {
       CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(type);
       CREATE INDEX IF NOT EXISTS idx_messages_is_read ON messages(is_read);
       CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
+
+      CREATE TABLE IF NOT EXISTS export_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        module VARCHAR(50) NOT NULL DEFAULT 'users',
+        fields TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_export_templates_user ON export_templates(user_id);
+      CREATE INDEX IF NOT EXISTS idx_export_templates_module ON export_templates(module);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_export_templates_user_module_name ON export_templates(user_id, module, name);
     `);
 
     const count = this.initDb.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number };

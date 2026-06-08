@@ -19,6 +19,8 @@ import {
   MessageCreate,
   MessageQuery,
   BatchOperationResult,
+  ExportTemplate,
+  ExportField,
 } from '@/types';
 
 const API_BASE_URL = '/api';
@@ -122,6 +124,7 @@ export interface UserExportParams {
   created_at_start?: string;
   created_at_end?: string;
   phone_prefix?: string;
+  fields?: string[];
 }
 
 export const userApi = {
@@ -236,6 +239,34 @@ export const userApi = {
 
   getExportTemplate: async (): Promise<ApiResponse<{ downloadUrl: string; fileName: string }>> => {
     return handleRequest<ApiResponse<{ downloadUrl: string; fileName: string }>>(`${API_BASE_URL}/users/export/template`);
+  },
+
+  getExportFields: async (): Promise<ApiResponse<{ fields: ExportField[]; defaultFields: string[] }>> => {
+    return handleRequest<ApiResponse<{ fields: ExportField[]; defaultFields: string[] }>>(`${API_BASE_URL}/users/export/fields`);
+  },
+
+  getExportTemplates: async (module: string = 'users'): Promise<ApiResponse<ExportTemplate[]>> => {
+    return handleRequest<ApiResponse<ExportTemplate[]>>(`${API_BASE_URL}/users/export/templates?module=${encodeURIComponent(module)}`);
+  },
+
+  createExportTemplate: async (data: { name: string; module?: string; fields: string[] }): Promise<ApiResponse<ExportTemplate>> => {
+    return handleRequest<ApiResponse<ExportTemplate>>(`${API_BASE_URL}/users/export/templates`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateExportTemplate: async (id: number, data: { name?: string; fields?: string[] }): Promise<ApiResponse<ExportTemplate>> => {
+    return handleRequest<ApiResponse<ExportTemplate>>(`${API_BASE_URL}/users/export/templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteExportTemplate: async (id: number): Promise<ApiResponse> => {
+    return handleRequest<ApiResponse>(`${API_BASE_URL}/users/export/templates/${id}`, {
+      method: 'DELETE',
+    });
   },
 
   getImportHistory: async (): Promise<ApiResponse<ImportHistory[]>> => {

@@ -7,7 +7,7 @@ import { getDb } from '../database';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest, requireAuth, requirePermission } from '../middleware/auth';
 import { upload, exportsDir, avatarUpload } from '../middleware/upload';
-import { User, UserCreate, UserUpdate, Role, ApiResponse, ImportHistory, ImportResult, UserDetail, OperationLog, BatchOperationResult, OperationLogDetail } from '../types';
+import { User, UserCreate, UserUpdate, Role, ApiResponse, ImportHistory, ImportResult, UserDetail, OperationLog, BatchOperationResult, OperationLogDetail, ExportTemplate, ExportTemplateCreate, ExportTemplateUpdate } from '../types';
 import { getClientIp, getOperatorName, recordOperationLog } from '../services/logService';
 
 const router = Router();
@@ -872,17 +872,38 @@ router.post('/import', requireAuth, requirePermission('user:import'),
   }
 });
 
+interface ExportFieldConfig {
+  key: string;
+  label: string;
+  width: number;
+  getValue: (user: User, roles: Role[]) => string | number;
+}
+
+const EXPORT_FIELDS: ExportFieldConfig[] = [
+  { key: 'id', label: '编号', width: 8, getValue: (user) => user.id },
+  { key: 'name', label: '姓名', width: 16, getValue: (user) => user.name },
+  { key: 'email', label: '邮箱', width: 30, getValue: (user) => user.email },
+  { key: 'phone', label: '手机号', width: 16, getValue: (user) => user.phone || '' },
+  { key: 'roles', label: '角色', width: 20, getValue: (user, roles) => roles.map(r => r.name).join('、') || '' },
+  { key: 'status', label: '状态', width: 10, getValue: (user) => user.status === 'active' ? '启用' : '禁用' },
+  { key: 'created_at', label: '创建时间', width: 20, getValue: (user) => user.created_at },
+  { key: 'updated_at', label: '更新时间', width: 20, getValue: (user) => user.updated_at },
+];
+
+const DEFAULT_EXPORT_FIELDS = ['id', 'name', 'email', 'phone', 'status', 'created_at'];
+
 router.post('/export', requireAuth, requirePermission('user:export'),
   (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
-    const { search, ids, statuses, created_at_start, created_at_end, phone_prefix } = req.body as {
+    const { search, ids, statuses, created_at_start, created_at_end, phone_prefix, fields } = req.body as {
       search?: string;
       ids?: number[];
       statuses?: string[];
       created_at_start?: string;
       created_at_end?: string;
       phone_prefix?: string;
+      fields?: string[];
     };
 
     let users: User[] = [];
@@ -939,24 +960,23 @@ router.post('/export', requireAuth, requirePermission('user:export'),
       }
     }
 
-    const exportData = users.map((user) => ({
-      编号: user.id,
-      姓名: user.name,
-      邮箱: user.email,
-      手机号: user.phone || '',
-      状态: user.status === 'active' ? '启用' : '禁用',
-      创建时间: user.created_at,
-    }));
+    const selectedFields = (fields && Array.isArray(fields) && fields.length > 0)
+      ? fields
+      : DEFAULT_EXPORT_FIELDS;
+
+    const validFields = EXPORT_FIELDS.filter(f => selectedFields.includes(f.key));
+
+    const exportData = users.map((user) => {
+      const roles = getUserRoles(db, user.id);
+      const row: Record<string, string | number> = {};
+      validFields.forEach(field => {
+        row[field.label] = field.getValue(user, roles);
+      });
+      return row;
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
-    worksheet['!cols'] = [
-      { wch: 8 },
-      { wch: 16 },
-      { wch: 30 },
-      { wch: 16 },
-      { wch: 10 },
-      { wch: 20 },
-    ];
+    worksheet['!cols'] = validFields.map(f => ({ wch: f.width }));
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, '用户列表');
@@ -977,6 +997,254 @@ router.post('/export', requireAuth, requirePermission('user:export'),
         count: users.length,
       },
       message: `导出成功，共${users.length}条数据`,
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/export/fields', requireAuth, requirePermission('user:export'),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const fields = EXPORT_FIELDS.map(f => ({
+      key: f.key,
+      label: f.label,
+    }));
+
+    const response: ApiResponse<{ fields: { key: string; label: string }[]; defaultFields: string[] }> = {
+      success: true,
+      data: {
+        fields,
+        defaultFields: DEFAULT_EXPORT_FIELDS,
+      },
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/export/templates', requireAuth, requirePermission('user:export'),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+    const module = (req.query.module as string) || 'users';
+
+    if (!req.userId) {
+      throw new AppError('未授权，请先登录', 401);
+    }
+
+    const templates = db
+      .prepare(
+        `SELECT * FROM export_templates WHERE user_id = ? AND module = ? ORDER BY created_at DESC`
+      )
+      .all(req.userId, module) as unknown as ExportTemplate[];
+
+    const parsedTemplates = templates.map(t => ({
+      ...t,
+      fields: JSON.parse(t.fields) as string[],
+    }));
+
+    const response: ApiResponse<Array<Omit<ExportTemplate, 'fields'> & { fields: string[] }>> = {
+      success: true,
+      data: parsedTemplates,
+      total: parsedTemplates.length,
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/export/templates', requireAuth, requirePermission('user:export'),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+    const { name, module, fields } = req.body as ExportTemplateCreate;
+
+    if (!req.userId) {
+      throw new AppError('未授权，请先登录', 401);
+    }
+
+    if (!name || !name.trim()) {
+      throw new AppError('模板名称不能为空', 400);
+    }
+
+    if (!fields || !Array.isArray(fields) || fields.length === 0) {
+      throw new AppError('请至少选择一个导出字段', 400);
+    }
+
+    const moduleValue = module || 'users';
+
+    const existing = db
+      .prepare(
+        'SELECT id FROM export_templates WHERE user_id = ? AND module = ? AND name = ?'
+      )
+      .get(req.userId, moduleValue, name.trim());
+
+    if (existing) {
+      throw new AppError('该模板名称已存在', 400);
+    }
+
+    const result = db
+      .prepare(
+        `INSERT INTO export_templates (user_id, name, module, fields)
+         VALUES (?, ?, ?, ?)`
+      )
+      .run(
+        req.userId,
+        name.trim(),
+        moduleValue,
+        JSON.stringify(fields)
+      );
+
+    const templateId = result.lastInsertRowid as number;
+
+    const template = db
+      .prepare('SELECT * FROM export_templates WHERE id = ?')
+      .get(templateId) as unknown as ExportTemplate;
+
+    const parsedTemplate = {
+      ...template,
+      fields: JSON.parse(template.fields) as string[],
+    };
+
+    const response: ApiResponse<Omit<ExportTemplate, 'fields'> & { fields: string[] }> = {
+      success: true,
+      data: parsedTemplate,
+      message: '模板保存成功',
+    };
+
+    res.status(201).json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/export/templates/:id', requireAuth, requirePermission('user:export'),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+
+    if (isNaN(id)) {
+      throw new AppError('无效的模板ID', 400);
+    }
+
+    if (!req.userId) {
+      throw new AppError('未授权，请先登录', 401);
+    }
+
+    const existingTemplate = db
+      .prepare('SELECT * FROM export_templates WHERE id = ?')
+      .get(id) as unknown as ExportTemplate | undefined;
+
+    if (!existingTemplate) {
+      throw new AppError('模板不存在', 404);
+    }
+
+    if (existingTemplate.user_id !== req.userId) {
+      throw new AppError('无权限修改此模板', 403);
+    }
+
+    const { name, fields } = req.body as ExportTemplateUpdate;
+
+    if (name !== undefined && !name.trim()) {
+      throw new AppError('模板名称不能为空', 400);
+    }
+
+    if (fields !== undefined && (!Array.isArray(fields) || fields.length === 0)) {
+      throw new AppError('请至少选择一个导出字段', 400);
+    }
+
+    if (name !== undefined && name.trim() !== existingTemplate.name) {
+      const duplicate = db
+        .prepare(
+          'SELECT id FROM export_templates WHERE user_id = ? AND module = ? AND name = ? AND id != ?'
+        )
+        .get(req.userId, existingTemplate.module, name.trim(), id);
+
+      if (duplicate) {
+        throw new AppError('该模板名称已存在', 400);
+      }
+    }
+
+    const updateFields: string[] = [];
+    const updateValues: unknown[] = [];
+
+    if (name !== undefined) {
+      updateFields.push('name = ?');
+      updateValues.push(name.trim());
+    }
+
+    if (fields !== undefined) {
+      updateFields.push('fields = ?');
+      updateValues.push(JSON.stringify(fields));
+    }
+
+    if (updateFields.length > 0) {
+      updateFields.push('updated_at = CURRENT_TIMESTAMP');
+      updateValues.push(id);
+      const sql = `UPDATE export_templates SET ${updateFields.join(', ')} WHERE id = ?`;
+      db.prepare(sql).run(...updateValues as unknown as []);
+    }
+
+    const updatedTemplate = db
+      .prepare('SELECT * FROM export_templates WHERE id = ?')
+      .get(id) as unknown as ExportTemplate;
+
+    const parsedTemplate = {
+      ...updatedTemplate,
+      fields: JSON.parse(updatedTemplate.fields) as string[],
+    };
+
+    const response: ApiResponse<Omit<ExportTemplate, 'fields'> & { fields: string[] }> = {
+      success: true,
+      data: parsedTemplate,
+      message: '模板更新成功',
+    };
+
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/export/templates/:id', requireAuth, requirePermission('user:export'),
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+
+    if (isNaN(id)) {
+      throw new AppError('无效的模板ID', 400);
+    }
+
+    if (!req.userId) {
+      throw new AppError('未授权，请先登录', 401);
+    }
+
+    const existingTemplate = db
+      .prepare('SELECT * FROM export_templates WHERE id = ?')
+      .get(id) as unknown as ExportTemplate | undefined;
+
+    if (!existingTemplate) {
+      throw new AppError('模板不存在', 404);
+    }
+
+    if (existingTemplate.user_id !== req.userId) {
+      throw new AppError('无权限删除此模板', 403);
+    }
+
+    db.prepare('DELETE FROM export_templates WHERE id = ?').run(id);
+
+    const response: ApiResponse = {
+      success: true,
+      message: '模板删除成功',
     };
 
     res.json(response);

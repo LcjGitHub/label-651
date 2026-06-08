@@ -223,3 +223,18 @@ export interface WSNewMessageEvent {
   data: unknown;
   timestamp: string;
 }
+
+export interface ExportTemplate {
+  id: number;
+  user_id: number;
+  name: string;
+  module: string;
+  fields: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExportField {
+  key: string;
+  label: string;
+}

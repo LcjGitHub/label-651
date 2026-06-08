@@ -218,6 +218,27 @@ export interface BatchOperationResult {
   failReasons?: { id: number; reason: string }[];
 }
 
+export interface ExportTemplate {
+  id: number;
+  user_id: number;
+  name: string;
+  module: string;
+  fields: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExportTemplateCreate {
+  name: string;
+  module: string;
+  fields: string[];
+}
+
+export interface ExportTemplateUpdate {
+  name?: string;
+  fields?: string[];
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
