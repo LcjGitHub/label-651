@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Loader2, Shield, Upload, History, Users, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Plus, Edit2, Trash2, Loader2, Shield, Upload, History, Users, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { User, UserCreate, UserUpdate, Toast as ToastType } from '@/types';
 import { userApi, UserListQuery } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
@@ -10,11 +10,12 @@ import ImportModal from '@/components/ImportModal';
 import ImportHistoryModal from '@/components/ImportHistoryModal';
 import ExportDropdown from '@/components/ExportDropdown';
 import AppHeader from '@/components/AppHeader';
+import SortHeaderIcon, { SortFieldType, SortOrderType } from '@/components/SortHeaderIcon';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 
-type SortField = 'name' | 'email' | 'created_at';
-type SortOrder = 'asc' | 'desc';
+type SortField = SortFieldType;
+type SortOrder = SortOrderType;
 
 export default function Home() {
   const { hasPermission } = useAuthStore();
@@ -51,32 +52,46 @@ export default function Home() {
   const [toasts, setToasts] = useState<ToastType[]>([]);
   const location = useLocation();
 
-  const fetchUsers = useCallback(async (params?: Partial<UserListQuery>) => {
+  const isInitialLoadRef = useRef(true);
+  const queryParamsRef = useRef({ search: '', page: 1, pageSize: 10, sortBy: 'created_at' as SortField, sortOrder: 'desc' as SortOrder });
+
+  const showToast = (type: ToastType['type'], message: string) => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, type, message }]);
+  };
+
+  const removeToast = (id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const queryParams: UserListQuery = {
-        search: searchQuery,
-        page,
-        pageSize,
-        sortBy,
-        sortOrder,
-        ...params,
-      };
-      const response = await userApi.getUsers(queryParams);
+      const { search, page: p, pageSize: ps, sortBy: sb, sortOrder: so } = queryParamsRef.current;
+      const response = await userApi.getUsers({ search, page: p, pageSize: ps, sortBy: sb, sortOrder: so });
       if (response.success && response.data) {
         setUsers(response.data);
         const dbTotal = response.total || response.data.length;
+        const fTotal = response.filteredTotal ?? dbTotal;
         setTotal(dbTotal);
-        setFilteredTotal(response.filteredTotal ?? dbTotal);
+        setFilteredTotal(fTotal);
         setSelectedIds([]);
+
+        const dataCount = search && search.trim() ? fTotal : dbTotal;
+        const newTotalPages = Math.max(1, Math.ceil(dataCount / ps));
+        if (p > newTotalPages) {
+          queryParamsRef.current.page = newTotalPages;
+          setPage(newTotalPages);
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '加载用户列表失败';
       showToast('error', message);
     } finally {
       setLoading(false);
+      isInitialLoadRef.current = false;
     }
-  }, [searchQuery, page, pageSize, sortBy, sortOrder]);
+  }, []);
 
   const totalPages = useMemo(() => {
     const count = searchQuery && searchQuery.trim() ? filteredTotal : total;
@@ -85,38 +100,34 @@ export default function Home() {
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
+      queryParamsRef.current.page = newPage;
       setPage(newPage);
+      fetchUsers();
     }
   };
 
   const handlePageSizeChange = (newPageSize: number) => {
+    queryParamsRef.current.pageSize = newPageSize;
+    queryParamsRef.current.page = 1;
     setPageSize(newPageSize);
     setPage(1);
+    fetchUsers();
   };
 
   const handleSort = (field: SortField) => {
     if (sortBy === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+      const newOrder: SortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+      queryParamsRef.current.sortOrder = newOrder;
+      setSortOrder(newOrder);
     } else {
+      queryParamsRef.current.sortBy = field;
+      queryParamsRef.current.sortOrder = 'asc';
+      queryParamsRef.current.page = 1;
       setSortBy(field);
       setSortOrder('asc');
+      setPage(1);
     }
-  };
-
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortBy !== field) {
-      return (
-        <span className="inline-flex flex-col ml-1 opacity-40 group-hover:opacity-70 transition-opacity">
-          <ChevronUp size={12} className="-mb-1" />
-          <ChevronDown size={12} className="-mt-1" />
-        </span>
-      );
-    }
-    return sortOrder === 'asc' ? (
-      <ChevronUp size={14} className="ml-1 text-blue-600" />
-    ) : (
-      <ChevronDown size={14} className="ml-1 text-blue-600" />
-    );
+    fetchUsers();
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -140,7 +151,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchUsers();
-  }, [fetchUsers, page, pageSize, sortBy, sortOrder]);
+  }, [fetchUsers]);
 
   useEffect(() => {
     const state = location.state as { message?: string } | null;
@@ -150,21 +161,15 @@ export default function Home() {
     }
   }, [location.state, navigate]);
 
-  const showToast = (type: ToastType['type'], message: string) => {
-    const id = Date.now();
-    setToasts((prev) => [...prev, { id, type, message }]);
-  };
-
-  const removeToast = (id: number) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
   const handleSearch = useCallback(
     (query: string) => {
+      queryParamsRef.current.search = query;
+      queryParamsRef.current.page = 1;
       setSearchQuery(query);
       setPage(1);
+      fetchUsers();
     },
-    []
+    [fetchUsers]
   );
 
   const handleAddClick = () => {
@@ -251,13 +256,13 @@ export default function Home() {
               <p className="text-sm text-gray-500 mt-0.5">
                 {searchQuery && searchQuery.trim() ? (
                   <>
-                    当前匹配 {filteredTotal} 位用户 · 数据库共 {total} 位
+                    共 {filteredTotal} 条匹配结果 · 总计 {total} 条
                   </>
                 ) : (
-                  <>共 {total} 位用户</>
+                  <>共 {total} 条数据</>
                 )}
                 {selectedIds.length > 0 && (
-                  <span className="ml-2 text-blue-600">（已选 {selectedIds.length} 位）</span>
+                  <span className="ml-2 text-blue-600">（已选 {selectedIds.length} 条）</span>
                 )}
               </p>
             </div>
@@ -314,12 +319,12 @@ export default function Home() {
             <SearchBar onSearch={handleSearch} />
           </div>
 
-          {loading ? (
+          {loading && isInitialLoadRef.current ? (
             <div className="p-16 flex flex-col items-center justify-center">
               <Loader2 className="animate-spin text-blue-600" size={40} />
               <p className="mt-4 text-gray-500">加载中...</p>
             </div>
-          ) : users.length === 0 ? (
+          ) : users.length === 0 && !loading ? (
             <div className="p-16 flex flex-col items-center justify-center text-center">
               <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                 <Users className="text-gray-400" size={40} />
@@ -342,7 +347,15 @@ export default function Home() {
               )}
             </div>
           ) : (
-            <>
+            <div className="relative">
+              {loading && !isInitialLoadRef.current && (
+                <div className="absolute inset-0 z-10 bg-white/60 backdrop-blur-[1px] flex items-center justify-center rounded-b-2xl">
+                  <div className="flex flex-col items-center">
+                    <Loader2 className="animate-spin text-blue-600" size={32} />
+                    <p className="mt-3 text-sm text-gray-600 font-medium">加载中...</p>
+                  </div>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full">
                 <thead className="bg-gray-50">
@@ -363,21 +376,41 @@ export default function Home() {
                       编号
                     </th>
                     <th
-                      className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group select-none"
+                      role="columnheader button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'name' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      aria-label={`按姓名排序，当前${sortBy === 'name' ? (sortOrder === 'asc' ? '升序' : '降序') : '未排序'}`}
+                      className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group select-none focus:outline-none focus:bg-gray-100 focus:ring-2 focus:ring-inset focus:ring-blue-500"
                       onClick={() => handleSort('name')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSort('name');
+                        }
+                      }}
                     >
                       <span className="inline-flex items-center">
                         姓名
-                        <SortIcon field="name" />
+                        <SortHeaderIcon field="name" currentSortBy={sortBy} currentSortOrder={sortOrder} />
                       </span>
                     </th>
                     <th
-                      className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group select-none"
+                      role="columnheader button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'email' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      aria-label={`按邮箱排序，当前${sortBy === 'email' ? (sortOrder === 'asc' ? '升序' : '降序') : '未排序'}`}
+                      className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group select-none focus:outline-none focus:bg-gray-100 focus:ring-2 focus:ring-inset focus:ring-blue-500"
                       onClick={() => handleSort('email')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSort('email');
+                        }
+                      }}
                     >
                       <span className="inline-flex items-center">
                         邮箱
-                        <SortIcon field="email" />
+                        <SortHeaderIcon field="email" currentSortBy={sortBy} currentSortOrder={sortOrder} />
                       </span>
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -390,12 +423,22 @@ export default function Home() {
                       状态
                     </th>
                     <th
-                      className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group select-none"
+                      role="columnheader button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'created_at' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      aria-label={`按创建时间排序，当前${sortBy === 'created_at' ? (sortOrder === 'asc' ? '升序' : '降序') : '未排序'}`}
+                      className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group select-none focus:outline-none focus:bg-gray-100 focus:ring-2 focus:ring-inset focus:ring-blue-500"
                       onClick={() => handleSort('created_at')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSort('created_at');
+                        }
+                      }}
                     >
                       <span className="inline-flex items-center">
                         创建时间
-                        <SortIcon field="created_at" />
+                        <SortHeaderIcon field="created_at" currentSortBy={sortBy} currentSortOrder={sortOrder} />
                       </span>
                     </th>
                     <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -511,7 +554,7 @@ export default function Home() {
                 </tbody>
               </table>
             </div>
-            {!loading && users.length > 0 && (
+            {users.length > 0 && (
               <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <span>共</span>
@@ -519,7 +562,7 @@ export default function Home() {
                     {searchQuery && searchQuery.trim() ? filteredTotal : total}
                   </span>
                   <span>条</span>
-                  <span className="text-gray-300 mx-2">|</span>
+                  <span className="text-gray-300 mx-2">·</span>
                   <span>每页</span>
                   <select
                     value={pageSize}
@@ -527,6 +570,7 @@ export default function Home() {
                     className="px-2 py-1 border border-gray-300 rounded-md text-sm font-medium
                                bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500
                                focus:border-blue-500 cursor-pointer"
+                    aria-label="选择每页显示条数"
                   >
                     {[10, 20, 50, 100].map((size) => (
                       <option key={size} value={size}>
@@ -614,7 +658,7 @@ export default function Home() {
                 </div>
               </div>
             )}
-            </>
+            </div>
           )}
         </div>
 

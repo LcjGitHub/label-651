@@ -164,6 +164,19 @@ export const initDatabase = (): DatabaseSync => {
       ['王五', 'wangwu@example.com', '13800138003', 'inactive'],
       ['赵六', 'zhaoliu@example.com', '13800138004', 'active'],
       ['钱七', 'qianqi@example.com', '13800138005', 'active'],
+      ['孙八', 'sunba@example.com', '13800138006', 'active'],
+      ['周九', 'zhoujiu@example.com', '13800138007', 'inactive'],
+      ['吴十', 'wushi@example.com', '13800138008', 'active'],
+      ['郑十一', 'zhengshiyi@example.com', '13800138009', 'active'],
+      ['冯十二', 'fengshier@example.com', '13800138010', 'active'],
+      ['陈十三', 'chenshisan@example.com', '13800138011', 'inactive'],
+      ['褚十四', 'chushisi@example.com', '13800138012', 'active'],
+      ['卫十五', 'weishiwu@example.com', '13800138013', 'active'],
+      ['蒋十六', 'jiangshiliu@example.com', '13800138014', 'active'],
+      ['沈十七', 'shenshiqi@example.com', '13800138015', 'inactive'],
+      ['韩十八', 'hanshiba@example.com', '13800138016', 'active'],
+      ['杨十九', 'yangshijiu@example.com', '13800138017', 'active'],
+      ['朱二十', 'zhusershi@example.com', '13800138018', 'active'],
     ];
 
     db.exec('BEGIN TRANSACTION');
@@ -280,6 +293,19 @@ export const initDatabase = (): DatabaseSync => {
       insertUserRole.run(3, 3);
       insertUserRole.run(4, 3);
       insertUserRole.run(5, 4);
+      insertUserRole.run(6, 3);
+      insertUserRole.run(7, 4);
+      insertUserRole.run(8, 3);
+      insertUserRole.run(9, 3);
+      insertUserRole.run(10, 4);
+      insertUserRole.run(11, 3);
+      insertUserRole.run(12, 3);
+      insertUserRole.run(13, 4);
+      insertUserRole.run(14, 3);
+      insertUserRole.run(15, 2);
+      insertUserRole.run(16, 3);
+      insertUserRole.run(17, 3);
+      insertUserRole.run(18, 4);
       db.exec('COMMIT');
       console.log('初始化用户角色关联数据成功');
     } catch (err) {
