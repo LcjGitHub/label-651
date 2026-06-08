@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Download, ChevronDown, FileSpreadsheet, ListChecks, Search, Loader2 } from 'lucide-react';
-import { userApi } from '@/services/api';
+import { Download, ChevronDown, FileSpreadsheet, ListChecks, Search, Loader2, Filter } from 'lucide-react';
+import { userApi, UserExportParams } from '@/services/api';
 
 interface ExportDropdownProps {
   selectedIds: number[];
@@ -9,6 +9,8 @@ interface ExportDropdownProps {
   filteredCount: number;
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
   onExport: () => void;
+  filterParams?: Omit<UserExportParams, 'search' | 'ids'>;
+  hasActiveFilters?: boolean;
 }
 
 export default function ExportDropdown({
@@ -18,6 +20,8 @@ export default function ExportDropdown({
   filteredCount,
   showToast,
   onExport,
+  filterParams,
+  hasActiveFilters = false,
 }: ExportDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [exporting, setExporting] = useState<'all' | 'selected' | 'filtered' | null>(null);
@@ -60,11 +64,11 @@ export default function ExportDropdown({
     }
   };
 
-  const handleExportFiltered = async (search: string) => {
+  const handleExportFiltered = async (params: UserExportParams) => {
     try {
       setExporting('filtered');
       setIsOpen(false);
-      const response = await userApi.exportUsers({ search });
+      const response = await userApi.exportUsers(params);
       if (response.success && response.data) {
         const link = document.createElement('a');
         link.href = response.data.downloadUrl;
@@ -103,12 +107,13 @@ export default function ExportDropdown({
   };
 
   const isLoading = exporting !== null;
+  const hasFilterCondition = (searchQuery && searchQuery.trim()) || hasActiveFilters;
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        disabled={isLoading || (totalCount === 0 && selectedIds.length === 0 && (!searchQuery || !searchQuery.trim()))}
+        disabled={isLoading || (totalCount === 0 && selectedIds.length === 0 && !hasFilterCondition)}
         className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700
                    rounded-lg font-medium text-sm hover:bg-gray-50 hover:border-gray-400
                    transition-all duration-200
@@ -145,20 +150,33 @@ export default function ExportDropdown({
 
           <button
             onClick={() => {
-              if (searchQuery && searchQuery.trim()) {
-                handleExportFiltered(searchQuery);
+              if (hasFilterCondition) {
+                const params: UserExportParams = {};
+                if (searchQuery && searchQuery.trim()) {
+                  params.search = searchQuery.trim();
+                }
+                if (filterParams) {
+                  Object.assign(params, filterParams);
+                }
+                handleExportFiltered(params);
               } else {
-                showToast('info', '请先输入搜索关键词');
+                showToast('info', '请先设置搜索或筛选条件');
               }
             }}
-            disabled={!searchQuery || !searchQuery.trim()}
+            disabled={!hasFilterCondition}
             className="w-full px-4 py-2.5 flex items-center gap-3 text-sm text-gray-700
                        hover:bg-gray-50 transition-colors duration-150
                        disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Search size={16} className="text-gray-500" />
+            {hasActiveFilters && !searchQuery ? (
+              <Filter size={16} className="text-gray-500" />
+            ) : (
+              <Search size={16} className="text-gray-500" />
+            )}
             <div className="flex-1 text-left">
-              <p className="font-medium">导出搜索结果</p>
+              <p className="font-medium">
+                {hasActiveFilters && !searchQuery ? '导出筛选结果' : '导出搜索/筛选结果'}
+              </p>
               <p className="text-xs text-gray-500">当前匹配 {filteredCount} 条数据</p>
             </div>
           </button>

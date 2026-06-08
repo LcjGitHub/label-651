@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Plus, Edit2, Trash2, Loader2, Shield, Upload, History, Users, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye } from 'lucide-react';
 import { User, Toast as ToastType } from '@/types';
-import { userApi, UserListQuery } from '@/services/api';
-import SearchBar from '@/components/SearchBar';
+import { userApi } from '@/services/api';
+import SearchBar, { FilterTag } from '@/components/SearchBar';
+import AdvancedFilter, { AdvancedFilterValue } from '@/components/AdvancedFilter';
 import UserForm from '@/components/UserForm';
 import ConfirmModal from '@/components/ConfirmModal';
 import Toast from '@/components/Toast';
@@ -27,6 +28,13 @@ export default function Home() {
   const [filteredTotal, setFilteredTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [advancedFilter, setAdvancedFilter] = useState<AdvancedFilterValue>({
+    statuses: [],
+    dateRange: { start: '', end: '' },
+    phonePrefix: '',
+  });
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -58,7 +66,17 @@ export default function Home() {
   const location = useLocation();
 
   const isInitialLoadRef = useRef(true);
-  const queryParamsRef = useRef({ search: '', page: 1, pageSize: 10, sortBy: 'created_at' as SortField, sortOrder: 'desc' as SortOrder });
+  const queryParamsRef = useRef({
+    search: '',
+    page: 1,
+    pageSize: 10,
+    sortBy: 'created_at' as SortField,
+    sortOrder: 'desc' as SortOrder,
+    statuses: [] as string[],
+    created_at_start: '',
+    created_at_end: '',
+    phone_prefix: '',
+  });
 
   const showToast = (type: ToastType['type'], message: string) => {
     const id = Date.now();
@@ -72,8 +90,18 @@ export default function Home() {
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const { search, page: p, pageSize: ps, sortBy: sb, sortOrder: so } = queryParamsRef.current;
-      const response = await userApi.getUsers({ search, page: p, pageSize: ps, sortBy: sb, sortOrder: so });
+      const { search, page: p, pageSize: ps, sortBy: sb, sortOrder: so, statuses, created_at_start, created_at_end, phone_prefix } = queryParamsRef.current;
+      const response = await userApi.getUsers({
+        search,
+        page: p,
+        pageSize: ps,
+        sortBy: sb,
+        sortOrder: so,
+        statuses: statuses.length > 0 ? statuses : undefined,
+        created_at_start: created_at_start || undefined,
+        created_at_end: created_at_end || undefined,
+        phone_prefix: phone_prefix || undefined,
+      });
       if (response.success && response.data) {
         setUsers(response.data);
         const dbTotal = response.total || response.data.length;
@@ -98,10 +126,53 @@ export default function Home() {
     }
   }, []);
 
+  const activeFilters = useMemo<FilterTag[]>(() => {
+    const tags: FilterTag[] = [];
+
+    if (advancedFilter.statuses.length > 0) {
+      const labels = advancedFilter.statuses.map((s) => (s === 'active' ? '启用' : '禁用'));
+      tags.push({
+        key: 'statuses',
+        label: `状态：${labels.join('、')}`,
+        value: advancedFilter.statuses.join(','),
+      });
+    }
+
+    if (advancedFilter.dateRange.start || advancedFilter.dateRange.end) {
+      const start = advancedFilter.dateRange.start || '不限';
+      const end = advancedFilter.dateRange.end || '不限';
+      tags.push({
+        key: 'dateRange',
+        label: `创建时间：${start} 至 ${end}`,
+        value: `${start}-${end}`,
+      });
+    }
+
+    if (advancedFilter.phonePrefix.trim()) {
+      tags.push({
+        key: 'phonePrefix',
+        label: `手机号前缀：${advancedFilter.phonePrefix}`,
+        value: advancedFilter.phonePrefix,
+      });
+    }
+
+    return tags;
+  }, [advancedFilter]);
+
+  const hasAnyFilter = useMemo(() => {
+    return (
+      advancedFilter.statuses.length > 0 ||
+      !!advancedFilter.dateRange.start ||
+      !!advancedFilter.dateRange.end ||
+      !!advancedFilter.phonePrefix.trim()
+    );
+  }, [advancedFilter]);
+
   const totalPages = useMemo(() => {
-    const count = searchQuery && searchQuery.trim() ? filteredTotal : total;
+    const hasFilter = hasAnyFilter || (searchQuery && searchQuery.trim());
+    const count = hasFilter ? filteredTotal : total;
     return Math.max(1, Math.ceil(count / pageSize));
-  }, [filteredTotal, total, pageSize, searchQuery]);
+  }, [filteredTotal, total, pageSize, searchQuery, hasAnyFilter]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -165,6 +236,58 @@ export default function Home() {
       navigate('/', { replace: true, state: {} });
     }
   }, [location.state, navigate]);
+
+  const applyAdvancedFilter = useCallback(() => {
+    queryParamsRef.current.statuses = advancedFilter.statuses;
+    queryParamsRef.current.created_at_start = advancedFilter.dateRange.start;
+    queryParamsRef.current.created_at_end = advancedFilter.dateRange.end;
+    queryParamsRef.current.phone_prefix = advancedFilter.phonePrefix.trim();
+    queryParamsRef.current.page = 1;
+    setPage(1);
+    setFilterOpen(false);
+    fetchUsers();
+  }, [advancedFilter, fetchUsers]);
+
+  const handleRemoveFilter = useCallback(
+    (key: string) => {
+      const newFilter = { ...advancedFilter };
+      if (key === 'statuses') {
+        newFilter.statuses = [];
+      } else if (key === 'dateRange') {
+        newFilter.dateRange = { start: '', end: '' };
+      } else if (key === 'phonePrefix') {
+        newFilter.phonePrefix = '';
+      }
+      setAdvancedFilter(newFilter);
+
+      if (key === 'statuses') queryParamsRef.current.statuses = [];
+      if (key === 'dateRange') {
+        queryParamsRef.current.created_at_start = '';
+        queryParamsRef.current.created_at_end = '';
+      }
+      if (key === 'phonePrefix') queryParamsRef.current.phone_prefix = '';
+      queryParamsRef.current.page = 1;
+      setPage(1);
+      fetchUsers();
+    },
+    [advancedFilter, fetchUsers]
+  );
+
+  const handleClearAllFilters = useCallback(() => {
+    const emptyFilter: AdvancedFilterValue = {
+      statuses: [],
+      dateRange: { start: '', end: '' },
+      phonePrefix: '',
+    };
+    setAdvancedFilter(emptyFilter);
+    queryParamsRef.current.statuses = [];
+    queryParamsRef.current.created_at_start = '';
+    queryParamsRef.current.created_at_end = '';
+    queryParamsRef.current.phone_prefix = '';
+    queryParamsRef.current.page = 1;
+    setPage(1);
+    fetchUsers();
+  }, [fetchUsers]);
 
   const handleSearch = useCallback(
     (query: string) => {
@@ -244,7 +367,7 @@ export default function Home() {
             <div>
               <h2 className="text-xl font-bold text-gray-900">用户列表</h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                {searchQuery && searchQuery.trim() ? (
+                {(searchQuery && searchQuery.trim()) || hasAnyFilter ? (
                   <>
                     共 {filteredTotal} 条匹配结果 · 总计 {total} 条
                   </>
@@ -287,6 +410,13 @@ export default function Home() {
                   filteredCount={filteredTotal}
                   showToast={showToast}
                   onExport={() => {}}
+                  filterParams={{
+                    statuses: advancedFilter.statuses.length > 0 ? advancedFilter.statuses : undefined,
+                    created_at_start: advancedFilter.dateRange.start || undefined,
+                    created_at_end: advancedFilter.dateRange.end || undefined,
+                    phone_prefix: advancedFilter.phonePrefix.trim() || undefined,
+                  }}
+                  hasActiveFilters={hasAnyFilter}
                 />
               )}
               {canCreateUser && (
@@ -306,8 +436,23 @@ export default function Home() {
 
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           <div className="p-6 border-b border-gray-100">
-            <SearchBar onSearch={handleSearch} />
+            <SearchBar
+              onSearch={handleSearch}
+              onToggleFilter={() => setFilterOpen(!filterOpen)}
+              filterOpen={filterOpen}
+              activeFilters={activeFilters}
+              onRemoveFilter={handleRemoveFilter}
+              onClearAllFilters={handleClearAllFilters}
+            />
           </div>
+          <AdvancedFilter
+            isOpen={filterOpen}
+            onClose={() => setFilterOpen(false)}
+            value={advancedFilter}
+            onChange={setAdvancedFilter}
+            onApply={applyAdvancedFilter}
+            onReset={handleClearAllFilters}
+          />
 
           {loading && isInitialLoadRef.current ? (
             <div className="p-16 flex flex-col items-center justify-center">
@@ -320,12 +465,12 @@ export default function Home() {
                 <Users className="text-gray-400" size={40} />
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {searchQuery ? '未找到匹配的用户' : '暂无用户数据'}
+                {searchQuery || hasAnyFilter ? '未找到匹配的用户' : '暂无用户数据'}
               </h3>
               <p className="text-gray-500 text-sm mb-6">
-                {searchQuery ? '请尝试其他搜索关键词' : '点击上方按钮添加第一个用户'}
+                {searchQuery || hasAnyFilter ? '请尝试调整搜索或筛选条件' : '点击上方按钮添加第一个用户'}
               </p>
-              {!searchQuery && (
+              {!(searchQuery || hasAnyFilter) && (
                 <button
                   onClick={handleAddClick}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white
@@ -556,7 +701,7 @@ export default function Home() {
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <span>共</span>
                   <span className="font-semibold text-gray-900">
-                    {searchQuery && searchQuery.trim() ? filteredTotal : total}
+                    {(searchQuery && searchQuery.trim()) || hasAnyFilter ? filteredTotal : total}
                   </span>
                   <span>条</span>
                   <span className="text-gray-300 mx-2">·</span>

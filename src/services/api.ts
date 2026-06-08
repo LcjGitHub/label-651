@@ -108,6 +108,19 @@ export interface UserListQuery {
   pageSize?: number;
   sortBy?: 'name' | 'email' | 'created_at';
   sortOrder?: 'asc' | 'desc';
+  statuses?: string[];
+  created_at_start?: string;
+  created_at_end?: string;
+  phone_prefix?: string;
+}
+
+export interface UserExportParams {
+  search?: string;
+  ids?: number[];
+  statuses?: string[];
+  created_at_start?: string;
+  created_at_end?: string;
+  phone_prefix?: string;
 }
 
 export const userApi = {
@@ -116,7 +129,13 @@ export const userApi = {
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
-          searchParams.append(key, String(value));
+          if (Array.isArray(value)) {
+            if (value.length > 0) {
+              searchParams.append(key, value.join(','));
+            }
+          } else {
+            searchParams.append(key, String(value));
+          }
         }
       });
     }
@@ -207,7 +226,7 @@ export const userApi = {
     });
   },
 
-  exportUsers: async (params?: { search?: string; ids?: number[] }): Promise<ApiResponse<{ downloadUrl: string; fileName: string; count: number }>> => {
+  exportUsers: async (params?: UserExportParams): Promise<ApiResponse<{ downloadUrl: string; fileName: string; count: number }>> => {
     return handleRequest<ApiResponse<{ downloadUrl: string; fileName: string; count: number }>>(`${API_BASE_URL}/users/export`, {
       method: 'POST',
       body: JSON.stringify(params || {}),

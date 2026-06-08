@@ -40,6 +40,11 @@ router.get('/', requireAuth, requirePermission('user:list'), (req: AuthRequest, 
     const db = getDb();
     const search = req.query.search as string;
 
+    const statusesParam = req.query.statuses as string;
+    const createdAtStart = req.query.created_at_start as string;
+    const createdAtEnd = req.query.created_at_end as string;
+    const phonePrefix = req.query.phone_prefix as string;
+
     const pageParam = parseInt(req.query.page as string);
     const pageSizeParam = parseInt(req.query.pageSize as string);
     const sortBy = (req.query.sortBy as string) || 'created_at';
@@ -55,19 +60,53 @@ router.get('/', requireAuth, requirePermission('user:list'), (req: AuthRequest, 
       .get() as { cnt: number };
     const total = allCount.cnt;
 
+    const whereConditions: string[] = [];
+    const whereParams: (string | number)[] = [];
+
+    if (search && search.trim()) {
+      whereConditions.push('(name LIKE ? OR email LIKE ?)');
+      const searchTerm = `%${search.trim()}%`;
+      whereParams.push(searchTerm, searchTerm);
+    }
+
+    if (statusesParam && statusesParam.trim()) {
+      const statuses = statusesParam.split(',').filter(s => ['active', 'inactive'].includes(s.trim()));
+      if (statuses.length > 0) {
+        const placeholders = statuses.map(() => '?').join(',');
+        whereConditions.push(`status IN (${placeholders})`);
+        whereParams.push(...statuses);
+      }
+    }
+
+    if (createdAtStart && createdAtStart.trim()) {
+      whereConditions.push('created_at >= ?');
+      whereParams.push(createdAtStart.trim());
+    }
+
+    if (createdAtEnd && createdAtEnd.trim()) {
+      whereConditions.push('created_at <= ?');
+      whereParams.push(createdAtEnd.trim() + ' 23:59:59');
+    }
+
+    if (phonePrefix && phonePrefix.trim()) {
+      whereConditions.push('phone LIKE ?');
+      whereParams.push(`${phonePrefix.trim()}%`);
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
     let users: User[];
     let filteredTotal = total;
 
-    if (search && search.trim()) {
-      const searchTerm = `%${search.trim()}%`;
+    if (whereClause) {
       const filteredCount = db
-        .prepare('SELECT COUNT(*) as cnt FROM users WHERE name LIKE ? OR email LIKE ?')
-        .get(searchTerm, searchTerm) as { cnt: number };
+        .prepare(`SELECT COUNT(*) as cnt FROM users ${whereClause}`)
+        .get(...whereParams) as { cnt: number };
       filteredTotal = filteredCount.cnt;
 
       const offset = (page - 1) * pageSize;
-      const sql = `SELECT * FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY ${validSortBy} ${validSortOrder} LIMIT ? OFFSET ?`;
-      users = db.prepare(sql).all(searchTerm, searchTerm, pageSize, offset) as unknown as User[];
+      const sql = `SELECT * FROM users ${whereClause} ORDER BY ${validSortBy} ${validSortOrder} LIMIT ? OFFSET ?`;
+      users = db.prepare(sql).all(...whereParams, pageSize, offset) as unknown as User[];
     } else {
       const offset = (page - 1) * pageSize;
       const sql = `SELECT * FROM users ORDER BY ${validSortBy} ${validSortOrder} LIMIT ? OFFSET ?`;
@@ -656,7 +695,14 @@ router.post('/export', requireAuth, requirePermission('user:export'),
   (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const db = getDb();
-    const { search, ids } = req.body as { search?: string; ids?: number[] };
+    const { search, ids, statuses, created_at_start, created_at_end, phone_prefix } = req.body as {
+      search?: string;
+      ids?: number[];
+      statuses?: string[];
+      created_at_start?: string;
+      created_at_end?: string;
+      phone_prefix?: string;
+    };
 
     let users: User[] = [];
 
@@ -665,17 +711,51 @@ router.post('/export', requireAuth, requirePermission('user:export'),
       users = db
         .prepare(`SELECT * FROM users WHERE id IN (${placeholders}) ORDER BY created_at DESC`)
         .all(...ids) as unknown as User[];
-    } else if (search && search.trim()) {
-      const searchTerm = `%${search.trim()}%`;
-      users = db
-        .prepare(
-          'SELECT * FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC'
-        )
-        .all(searchTerm, searchTerm) as unknown as User[];
     } else {
-      users = db
-        .prepare('SELECT * FROM users ORDER BY created_at DESC')
-        .all() as unknown as User[];
+      const whereConditions: string[] = [];
+      const whereParams: (string | number)[] = [];
+
+      if (search && search.trim()) {
+        whereConditions.push('(name LIKE ? OR email LIKE ?)');
+        const searchTerm = `%${search.trim()}%`;
+        whereParams.push(searchTerm, searchTerm);
+      }
+
+      if (statuses && Array.isArray(statuses) && statuses.length > 0) {
+        const validStatuses = statuses.filter(s => ['active', 'inactive'].includes(s));
+        if (validStatuses.length > 0) {
+          const placeholders = validStatuses.map(() => '?').join(',');
+          whereConditions.push(`status IN (${placeholders})`);
+          whereParams.push(...validStatuses);
+        }
+      }
+
+      if (created_at_start && created_at_start.trim()) {
+        whereConditions.push('created_at >= ?');
+        whereParams.push(created_at_start.trim());
+      }
+
+      if (created_at_end && created_at_end.trim()) {
+        whereConditions.push('created_at <= ?');
+        whereParams.push(created_at_end.trim() + ' 23:59:59');
+      }
+
+      if (phone_prefix && phone_prefix.trim()) {
+        whereConditions.push('phone LIKE ?');
+        whereParams.push(`${phone_prefix.trim()}%`);
+      }
+
+      const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+      if (whereClause) {
+        users = db
+          .prepare(`SELECT * FROM users ${whereClause} ORDER BY created_at DESC`)
+          .all(...whereParams) as unknown as User[];
+      } else {
+        users = db
+          .prepare('SELECT * FROM users ORDER BY created_at DESC')
+          .all() as unknown as User[];
+      }
     }
 
     const exportData = users.map((user) => ({
