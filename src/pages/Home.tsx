@@ -237,16 +237,19 @@ export default function Home() {
     }
   }, [location.state, navigate]);
 
-  const applyAdvancedFilter = useCallback(() => {
-    queryParamsRef.current.statuses = advancedFilter.statuses;
-    queryParamsRef.current.created_at_start = advancedFilter.dateRange.start;
-    queryParamsRef.current.created_at_end = advancedFilter.dateRange.end;
-    queryParamsRef.current.phone_prefix = advancedFilter.phonePrefix.trim();
-    queryParamsRef.current.page = 1;
-    setPage(1);
-    setFilterOpen(false);
-    fetchUsers();
-  }, [advancedFilter, fetchUsers]);
+  const applyAdvancedFilter = useCallback(
+    (filterValue: AdvancedFilterValue) => {
+      queryParamsRef.current.statuses = filterValue.statuses;
+      queryParamsRef.current.created_at_start = filterValue.dateRange.start;
+      queryParamsRef.current.created_at_end = filterValue.dateRange.end;
+      queryParamsRef.current.phone_prefix = filterValue.phonePrefix.trim();
+      queryParamsRef.current.page = 1;
+      setPage(1);
+      setFilterOpen(false);
+      fetchUsers();
+    },
+    [fetchUsers]
+  );
 
   const handleRemoveFilter = useCallback(
     (key: string) => {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import MultiSelect, { MultiSelectOption } from './MultiSelect';
 import DateRangePicker, { DateRangeValue } from './DateRangePicker';
@@ -14,7 +14,7 @@ interface AdvancedFilterProps {
   onClose: () => void;
   value: AdvancedFilterValue;
   onChange: (value: AdvancedFilterValue) => void;
-  onApply: () => void;
+  onApply: (value: AdvancedFilterValue) => void;
   onReset: () => void;
 }
 
@@ -33,6 +33,12 @@ export default function AdvancedFilter({
 }: AdvancedFilterProps) {
   const [localValue, setLocalValue] = useState<AdvancedFilterValue>(value);
 
+  useEffect(() => {
+    if (isOpen) {
+      setLocalValue(value);
+    }
+  }, [isOpen, value]);
+
   const handleStatusesChange = (statuses: string[]) => {
     setLocalValue((prev) => ({ ...prev, statuses }));
   };
@@ -47,7 +53,7 @@ export default function AdvancedFilter({
 
   const handleApply = () => {
     onChange(localValue);
-    onApply();
+    onApply(localValue);
   };
 
   const handleReset = () => {

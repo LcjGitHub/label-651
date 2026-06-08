@@ -47,9 +47,7 @@ export default function MultiSelect({
     onChange(value.filter((v) => v !== optionValue));
   };
 
-  const selectedLabels = options
-    .filter((o) => value.includes(o.value))
-    .map((o) => o.label);
+  const selectedOptions = options.filter((o) => value.includes(o.value));
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
@@ -61,16 +59,16 @@ export default function MultiSelect({
                    focus:border-transparent transition-all duration-200"
       >
         <div className="flex flex-wrap gap-1 flex-1">
-          {selectedLabels.length > 0 ? (
-            selectedLabels.map((label, index) => (
+          {selectedOptions.length > 0 ? (
+            selectedOptions.map((option) => (
               <span
-                key={index}
+                key={option.value}
                 className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700
                            rounded text-xs font-medium"
               >
-                {label}
+                {option.label}
                 <button
-                  onClick={(e) => handleRemove(value[index], e)}
+                  onClick={(e) => handleRemove(option.value, e)}
                   className="hover:text-blue-900 transition-colors"
                 >
                   <X size={12} />
