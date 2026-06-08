@@ -17,6 +17,8 @@ const app = express();
 const PORT = process.env.PORT || 8089;
 const server = createServer(app);
 
+const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').filter(Boolean);
+
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -25,7 +27,8 @@ app.use(
         origin.startsWith('http://localhost') ||
         origin.startsWith('http://127.0.0.1') ||
         origin.startsWith('http://[::1]');
-      callback(null, isLocal);
+      const isAllowed = isLocal || allowedOrigins.some((o) => origin && origin.startsWith(o.trim()));
+      callback(null, isAllowed);
     },
     credentials: true,
   })

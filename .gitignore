@@ -10,7 +10,12 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+backend/dist
 *.local
+
+# Docker
+.env
+docker-compose.override.yml
 
 # Editor directories and files
 .vscode/*
