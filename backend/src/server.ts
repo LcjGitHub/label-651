@@ -9,7 +9,7 @@ import operationLogsRouter from './routes/operationLogs';
 import messagesRouter from './routes/messages';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { globalOperationLogMiddleware } from './middleware/globalOperationLog';
-import { initDatabase } from './database';
+import { initDatabase, getConnectionStats, getSlowQueryLogs, getConnectionDetails } from './database';
 import { exportsDir, avatarsDir } from './middleware/upload';
 import { initWebSocket } from './services/wsService';
 
@@ -44,6 +44,55 @@ app.get('/api/health', (req, res) => {
     message: '用户管理系统 API 运行正常',
     timestamp: new Date().toISOString(),
   });
+});
+
+app.get('/api/db/stats', (req, res) => {
+  try {
+    const stats = getConnectionStats();
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err instanceof Error ? err.message : '获取数据库统计信息失败',
+    });
+  }
+});
+
+app.get('/api/db/slow-queries', (req, res) => {
+  try {
+    const limitParam = parseInt(req.query.limit as string);
+    const limit = isNaN(limitParam) ? 100 : Math.min(Math.max(limitParam, 1), 500);
+    const logs = getSlowQueryLogs(limit);
+    res.json({
+      success: true,
+      data: logs,
+      total: logs.length,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err instanceof Error ? err.message : '获取慢查询日志失败',
+    });
+  }
+});
+
+app.get('/api/db/connections', (req, res) => {
+  try {
+    const details = getConnectionDetails();
+    res.json({
+      success: true,
+      data: details,
+      total: details.length,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err instanceof Error ? err.message : '获取连接详情失败',
+    });
+  }
 });
 
 app.use('/api/auth', authRouter);
