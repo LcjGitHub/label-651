@@ -4,13 +4,14 @@ import { User, UserCreate, UserUpdate } from '@/types';
 import { userApi } from '@/services/api';
 import RoleSelect from './RoleSelect';
 import UserAvatar from './UserAvatar';
+import AvatarCropper from './AvatarCropper';
 
 interface UserFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: UserCreate | UserUpdate) => Promise<void>;
+  onSaved: (user: User) => void;
+  onError?: (message: string) => void;
   user?: User | null;
-  isLoading?: boolean;
 }
 
 interface FormErrors {
@@ -20,12 +21,14 @@ interface FormErrors {
   avatar?: string;
 }
 
+type FormStage = 'editing' | 'submitting' | 'uploading';
+
 export default function UserForm({
   isOpen,
   onClose,
-  onSubmit,
+  onSaved,
+  onError,
   user,
-  isLoading = false,
 }: UserFormProps) {
   const [formData, setFormData] = useState<UserCreate & { role_ids: number[] }>({
     name: '',
@@ -33,14 +36,17 @@ export default function UserForm({
     phone: '',
     status: 'active',
     role_ids: [],
-    avatar: undefined,
   });
   const [errors, setErrors] = useState<FormErrors>({});
-  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [stage, setStage] = useState<FormStage>('editing');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [previewAvatar, setPreviewAvatar] = useState<string | null>(null);
+  const [pendingCropperSrc, setPendingCropperSrc] = useState<string | null>(null);
+  const [croppedAvatarFile, setCroppedAvatarFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isEditing = !!user;
 
   useEffect(() => {
     if (user) {
@@ -50,7 +56,6 @@ export default function UserForm({
         phone: user.phone,
         status: user.status,
         role_ids: user.roles?.map((r) => r.id) || [],
-        avatar: user.avatar || undefined,
       });
       setPreviewAvatar(user.avatar || null);
     } else {
@@ -60,18 +65,19 @@ export default function UserForm({
         phone: '',
         status: 'active',
         role_ids: [],
-        avatar: undefined,
       });
       setPreviewAvatar(null);
     }
     setErrors({});
-    setAvatarUploading(false);
+    setStage('editing');
     setUploadProgress(0);
+    setCroppedAvatarFile(null);
+    setPendingCropperSrc(null);
   }, [user, isOpen]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape' && isOpen && stage === 'editing' && !pendingCropperSrc) {
         onClose();
       }
     };
@@ -85,7 +91,7 @@ export default function UserForm({
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = '';
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, stage, pendingCropperSrc]);
 
   const validate = (): boolean => {
     const newErrors: FormErrors = {};
@@ -121,51 +127,25 @@ export default function UserForm({
     return null;
   };
 
-  const handleAvatarFile = async (file: File) => {
+  const openCropperForFile = (file: File) => {
     const validationError = validateImageFile(file);
     if (validationError) {
       setErrors((prev) => ({ ...prev, avatar: validationError }));
       return;
     }
-
     setErrors((prev) => ({ ...prev, avatar: undefined }));
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      setPreviewAvatar(e.target?.result as string);
+      setPendingCropperSrc(e.target?.result as string);
     };
     reader.readAsDataURL(file);
-
-    if (user) {
-      try {
-        setAvatarUploading(true);
-        setUploadProgress(0);
-
-        const response = await userApi.uploadAvatar(user.id, file, (percent) => {
-          setUploadProgress(percent);
-        });
-
-        if (response.success && response.data) {
-          setFormData((prev) => ({ ...prev, avatar: response.data!.avatarUrl }));
-          setPreviewAvatar(response.data!.avatarUrl);
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : '头像上传失败';
-        setErrors((prev) => ({ ...prev, avatar: message }));
-        setPreviewAvatar(user.avatar || null);
-      } finally {
-        setAvatarUploading(false);
-        setUploadProgress(0);
-      }
-    } else {
-      setFormData((prev) => ({ ...prev, avatar: file.name }));
-    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      handleAvatarFile(file);
+      openCropperForFile(file);
     }
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -190,19 +170,84 @@ export default function UserForm({
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      handleAvatarFile(file);
+      openCropperForFile(file);
     }
+  };
+
+  const handleCropperConfirm = (croppedFile: File) => {
+    setCroppedAvatarFile(croppedFile);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setPreviewAvatar(e.target?.result as string);
+    };
+    reader.readAsDataURL(croppedFile);
+    setPendingCropperSrc(null);
+  };
+
+  const handleCropperClose = () => {
+    setPendingCropperSrc(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate() || stage !== 'editing') return;
 
-    const submitData = user
-      ? { ...formData }
-      : { ...formData };
+    try {
+      setStage('submitting');
+      let savedUser: User | null = null;
 
-    await onSubmit(submitData);
+      if (isEditing && user) {
+        const updatePayload: UserUpdate = {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          status: formData.status,
+          role_ids: formData.role_ids,
+        };
+        const response = await userApi.updateUser(user.id, updatePayload);
+        if (response.success && response.data) {
+          savedUser = response.data;
+        }
+      } else {
+        const createPayload: UserCreate = {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          status: formData.status,
+          role_ids: formData.role_ids,
+        };
+        const response = await userApi.createUser(createPayload);
+        if (response.success && response.data) {
+          savedUser = response.data;
+        }
+      }
+
+      if (!savedUser) {
+        setStage('editing');
+        return;
+      }
+
+      if (croppedAvatarFile) {
+        setStage('uploading');
+        setUploadProgress(0);
+        const uploadResponse = await userApi.uploadAvatar(
+          savedUser.id,
+          croppedAvatarFile,
+          (percent) => setUploadProgress(percent)
+        );
+        if (uploadResponse.success && uploadResponse.data) {
+          savedUser = uploadResponse.data.user;
+        }
+      }
+
+      onSaved(savedUser);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '操作失败';
+      setStage('editing');
+      if (onError) {
+        onError(message);
+      }
+    }
   };
 
   const handleChange = (
@@ -221,7 +266,15 @@ export default function UserForm({
 
   if (!isOpen) return null;
 
-  const isEditing = !!user;
+  const isBusy = stage !== 'editing';
+  const submitButtonLabel =
+    stage === 'submitting'
+      ? '保存中...'
+      : stage === 'uploading'
+      ? `上传头像 ${uploadProgress}%`
+      : isEditing
+      ? '保存'
+      : '创建';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -240,7 +293,9 @@ export default function UserForm({
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors duration-150"
+            disabled={isBusy}
+            className="text-gray-400 hover:text-gray-600 transition-colors duration-150
+                       disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="关闭"
           >
             <X size={20} />
@@ -256,12 +311,12 @@ export default function UserForm({
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onClick={() => !avatarUploading && fileInputRef.current?.click()}
+              onClick={() => !isBusy && fileInputRef.current?.click()}
               className={`relative flex items-center justify-center gap-4 p-4 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ${
                 isDragging
                   ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'
-              } ${avatarUploading ? 'cursor-not-allowed opacity-60' : ''}`}
+              } ${isBusy ? 'cursor-not-allowed opacity-60' : ''}`}
             >
               <div className="flex items-center gap-4">
                 <UserAvatar
@@ -273,7 +328,7 @@ export default function UserForm({
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Upload size={16} />
                     <span className="font-medium">
-                      {avatarUploading ? '上传中...' : '点击或拖拽上传头像'}
+                      {isBusy ? '处理中...' : '点击或拖拽上传头像'}
                     </span>
                   </div>
                   <span className="text-xs text-gray-400">
@@ -282,7 +337,7 @@ export default function UserForm({
                 </div>
               </div>
 
-              {avatarUploading && (
+              {stage === 'uploading' && (
                 <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl">
                   <div className="flex flex-col items-center gap-2 w-3/4">
                     <Loader2 className="animate-spin text-blue-600" size={24} />
@@ -293,8 +348,17 @@ export default function UserForm({
                       />
                     </div>
                     <span className="text-xs text-gray-600 font-medium">
-                      {uploadProgress}%
+                      上传中 {uploadProgress}%
                     </span>
+                  </div>
+                </div>
+              )}
+
+              {stage === 'submitting' && (
+                <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl">
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="animate-spin text-blue-600" size={24} />
+                    <span className="text-xs text-gray-600 font-medium">保存中...</span>
                   </div>
                 </div>
               )}
@@ -322,9 +386,10 @@ export default function UserForm({
               value={formData.name}
               onChange={handleChange}
               placeholder="请输入姓名"
+              disabled={isBusy}
               className={`w-full px-4 py-2.5 border rounded-lg text-sm
                          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                         transition-all duration-200 ${
+                         transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                            errors.name
                              ? 'border-red-500 focus:ring-red-500'
                              : 'border-gray-300'
@@ -345,9 +410,10 @@ export default function UserForm({
               value={formData.email}
               onChange={handleChange}
               placeholder="请输入邮箱"
+              disabled={isBusy}
               className={`w-full px-4 py-2.5 border rounded-lg text-sm
                          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                         transition-all duration-200 ${
+                         transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                            errors.email
                              ? 'border-red-500 focus:ring-red-500'
                              : 'border-gray-300'
@@ -368,9 +434,10 @@ export default function UserForm({
               value={formData.phone}
               onChange={handleChange}
               placeholder="请输入手机号（选填）"
+              disabled={isBusy}
               className={`w-full px-4 py-2.5 border rounded-lg text-sm
                          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                         transition-all duration-200 ${
+                         transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                            errors.phone
                              ? 'border-red-500 focus:ring-red-500'
                              : 'border-gray-300'
@@ -389,9 +456,10 @@ export default function UserForm({
               name="status"
               value={formData.status}
               onChange={handleChange}
+              disabled={isBusy}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
                          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                         transition-all duration-200 bg-white"
+                         transition-all duration-200 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="active">启用</option>
               <option value="inactive">禁用</option>
@@ -405,7 +473,7 @@ export default function UserForm({
             <RoleSelect
               selectedRoleIds={formData.role_ids}
               onChange={handleRoleChange}
-              disabled={isLoading}
+              disabled={isBusy}
               placeholder="请选择用户角色"
             />
           </div>
@@ -414,7 +482,7 @@ export default function UserForm({
             <button
               type="button"
               onClick={onClose}
-              disabled={isLoading || avatarUploading}
+              disabled={isBusy}
               className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-gray-100
                          rounded-lg hover:bg-gray-200 transition-colors duration-150
                          disabled:opacity-50 disabled:cursor-not-allowed"
@@ -423,15 +491,22 @@ export default function UserForm({
             </button>
             <button
               type="submit"
-              disabled={isLoading || avatarUploading}
+              disabled={isBusy}
               className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600
                          rounded-lg hover:bg-blue-700 transition-colors duration-150
                          disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? '保存中...' : isEditing ? '保存' : '创建'}
+              {submitButtonLabel}
             </button>
           </div>
         </form>
+
+        <AvatarCropper
+          isOpen={!!pendingCropperSrc}
+          imageSrc={pendingCropperSrc || ''}
+          onClose={handleCropperClose}
+          onConfirm={handleCropperConfirm}
+        />
       </div>
     </div>
   );

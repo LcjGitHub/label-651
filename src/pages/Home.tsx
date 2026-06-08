@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Plus, Edit2, Trash2, Loader2, Shield, Upload, History, Users, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye } from 'lucide-react';
-import { User, UserCreate, UserUpdate, Toast as ToastType } from '@/types';
+import { User, Toast as ToastType } from '@/types';
 import { userApi, UserListQuery } from '@/services/api';
 import SearchBar from '@/components/SearchBar';
 import UserForm from '@/components/UserForm';
@@ -35,7 +35,6 @@ export default function Home() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [formLoading, setFormLoading] = useState(false);
 
   const canViewUser = hasPermission('user:view');
   const canCreateUser = hasPermission('user:create');
@@ -198,30 +197,10 @@ export default function Home() {
     setDeleteModalOpen(true);
   };
 
-  const handleFormSubmit = async (data: UserCreate | UserUpdate) => {
-    try {
-      setFormLoading(true);
-      if (editingUser) {
-        const response = await userApi.updateUser(editingUser.id, data as UserUpdate);
-        if (response.success) {
-          showToast('success', response.message || '用户更新成功');
-          setFormOpen(false);
-          fetchUsers();
-        }
-      } else {
-        const response = await userApi.createUser(data as UserCreate);
-        if (response.success) {
-          showToast('success', response.message || '用户创建成功');
-          setFormOpen(false);
-          fetchUsers();
-        }
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '操作失败';
-      showToast('error', message);
-    } finally {
-      setFormLoading(false);
-    }
+  const handleUserSaved = (_savedUser: User) => {
+    showToast('success', editingUser ? '用户更新成功' : '用户创建成功');
+    setFormOpen(false);
+    fetchUsers();
   };
 
   const handleDeleteConfirm = async () => {
@@ -683,9 +662,9 @@ export default function Home() {
         <UserForm
           isOpen={formOpen}
           onClose={() => setFormOpen(false)}
-          onSubmit={handleFormSubmit}
+          onSaved={handleUserSaved}
+          onError={(msg) => showToast('error', msg)}
           user={editingUser}
-          isLoading={formLoading}
         />
 
         <ConfirmModal

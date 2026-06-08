@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+
 interface UserAvatarProps {
   name: string;
   avatar?: string | null;
@@ -18,17 +20,20 @@ export default function UserAvatar({
   size = 'md',
   className = '',
 }: UserAvatarProps) {
+  const [imgError, setImgError] = useState(false);
   const initial = name?.charAt(0) || '?';
 
-  if (avatar) {
+  useEffect(() => {
+    setImgError(false);
+  }, [avatar]);
+
+  if (avatar && !imgError) {
     return (
       <img
         src={avatar}
         alt={name}
         className={`rounded-full object-cover ${sizeClasses[size]} ${className}`}
-        onError={(e) => {
-          (e.target as HTMLImageElement).style.display = 'none';
-        }}
+        onError={() => setImgError(true)}
       />
     );
   }
